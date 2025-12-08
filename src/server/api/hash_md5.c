@@ -6,8 +6,7 @@
  * 2. Simple wrapper functions for easy integration
  */
 
-#include "hash_md5.h"
-
+#include <hash_md5.h>
 #include <stdio.h>
 #include <string.h>
 

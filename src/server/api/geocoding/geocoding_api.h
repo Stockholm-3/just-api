@@ -98,8 +98,7 @@ int geocoding_api_search_readonly_cache(const char*         city_name,
  * This function minimizes API calls for autocomplete by checking
  * local databases first.
  */
-int geocoding_api_search_smart(const char* query,
-                              GeocodingResponse** response);
+int geocoding_api_search_smart(const char* query, GeocodingResponse** response);
 
 /**
  * Search for a city by name with an additional region filter

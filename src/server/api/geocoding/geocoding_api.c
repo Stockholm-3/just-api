@@ -5,13 +5,11 @@
  * API documentation: https://open-meteo.com/en/docs/geocoding-api
  */
 
-#include "geocoding_api.h"
-
-#include "hash_md5.h"
-#include "http_client.h"
-
 #include <ctype.h>
 #include <errno.h>
+#include <geocoding_api.h>
+#include <hash_md5.h>
+#include <http_client.h>
 #include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -290,12 +288,12 @@ int geocoding_api_search_readonly_cache(const char*         city_name,
 
 /* Forward declarations for popular cities API */
 typedef struct {
-    char name[128];
-    char country[64];
-    char country_code[8];
+    char   name[128];
+    char   country[64];
+    char   country_code[8];
     double latitude;
     double longitude;
-    int population;
+    int    population;
 } PopularCity;
 
 extern int popular_cities_search(void* db, const char* query,
@@ -304,7 +302,7 @@ extern int popular_cities_search(void* db, const char* query,
 
 /* Helper: Convert PopularCity array to GeocodingResponse */
 static GeocodingResponse* convert_popular_to_geocoding(PopularCity** cities,
-                                                       size_t count) {
+                                                       size_t        count) {
     if (!cities || count == 0) {
         return NULL;
     }
@@ -323,27 +321,27 @@ static GeocodingResponse* convert_popular_to_geocoding(PopularCity** cities,
     resp->count = count;
 
     for (size_t i = 0; i < count; i++) {
-        PopularCity* pc = cities[i];
+        PopularCity*     pc = cities[i];
         GeocodingResult* gr = &resp->results[i];
 
         strncpy(gr->name, pc->name, sizeof(gr->name) - 1);
         strncpy(gr->country, pc->country, sizeof(gr->country) - 1);
         strncpy(gr->country_code, pc->country_code,
-               sizeof(gr->country_code) - 1);
-        gr->latitude = (float)pc->latitude;
-        gr->longitude = (float)pc->longitude;
-        gr->population = pc->population;
-        gr->id = 0; /* Not available in PopularCity */
-        gr->admin1[0] = '\0';
-        gr->admin2[0] = '\0';
+                sizeof(gr->country_code) - 1);
+        gr->latitude    = (float)pc->latitude;
+        gr->longitude   = (float)pc->longitude;
+        gr->population  = pc->population;
+        gr->id          = 0; /* Not available in PopularCity */
+        gr->admin1[0]   = '\0';
+        gr->admin2[0]   = '\0';
         gr->timezone[0] = '\0';
     }
 
     return resp;
 }
 
-int geocoding_api_search_smart(const char* query,
-                              GeocodingResponse** response) {
+int geocoding_api_search_smart(const char*         query,
+                               GeocodingResponse** response) {
     if (!query || !response) {
         fprintf(stderr, "[GEOCODING] Invalid parameters\n");
         return -1;
@@ -358,17 +356,17 @@ int geocoding_api_search_smart(const char* query,
     /* Tier 1: Search in Popular Cities DB */
     if (g_popular_cities_db) {
         PopularCity* popular_results[10];
-        size_t popular_count = 0;
+        size_t       popular_count = 0;
 
         int ret = popular_cities_search(g_popular_cities_db, query,
-                                       popular_results, &popular_count, 10);
+                                        popular_results, &popular_count, 10);
 
         if (ret == 0 && popular_count > 0) {
             printf("[GEOCODING] Found %zu results in popular cities DB\n",
                    popular_count);
 
-            *response = convert_popular_to_geocoding(popular_results,
-                                                     popular_count);
+            *response =
+                convert_popular_to_geocoding(popular_results, popular_count);
 
             if (*response) {
                 return 0; /* SUCCESS - found in local DB */

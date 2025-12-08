@@ -1,10 +1,8 @@
-#include "open_meteo_api.h"
-
-#include "hash_md5.h"
-#include "http_client.h"
-
 #include <errno.h>
+#include <hash_md5.h>
+#include <http_client.h>
 #include <jansson.h>
+#include <open_meteo_api.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

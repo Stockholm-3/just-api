@@ -1,78 +1,81 @@
 SHELL := bash
+
 # ------------------------------------------------------------
 # Compiler + global settings
 # ------------------------------------------------------------
 CC          := gcc
+
 SRC_DIR     := src
-# Separate build folders per mode
+LIB_DIR     := lib
+INC_DIR     := includes
+
 BUILD_MODE  ?= debug
 BUILD_DIR   := build/$(BUILD_MODE)
-BIN_SERVER  := $(BUILD_DIR)/server/just-weather
+BIN_SERVER  := $(BUILD_DIR)/just-weather-server
 
 # ------------------------------------------------------------
 # Build configuration
 # ------------------------------------------------------------
 ifeq ($(BUILD_MODE),release)
-	CFLAGS_BASE := -O3 -DNDEBUG
-	BUILD_TYPE  := Release
+    CFLAGS_BASE := -O3 -DNDEBUG
+    BUILD_TYPE  := Release
 else
-	CFLAGS_BASE := -O1 -g
-	BUILD_TYPE  := Debug
+    CFLAGS_BASE := -O1 -g
+    BUILD_TYPE  := Debug
 endif
 
+# ------------------------------------------------------------
+# Include directories
+# ------------------------------------------------------------
+SRC_INCLUDES := $(shell find $(SRC_DIR) -type d)
+LIB_INCLUDES := $(shell find -L $(LIB_DIR) -type d)
 
 # ------------------------------------------------------------
-# Compiler and linker flags
+# Compiler flags
 # ------------------------------------------------------------
-CFLAGS      := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP \
-               -Ilib/jansson -Isrc/lib -Isrc/server -Iincludes \
-               -Isrc/lib/tcp -Isrc/lib/http -Isrc/lib/http/http_server -Isrc/lib/utils -Isrc/lib/weather \
-               -Isrc/server/api -Isrc/server/api/geocoding -Isrc/server/api/openmeteo
 
-JANSSON_CFLAGS := $(filter-out -Werror -Wfatal-errors,$(CFLAGS)) -w
+INCLUDES := $(addprefix -I,$(SRC_INCLUDES)) $(addprefix -I,$(LIB_INCLUDES)) -I$(INC_DIR)
+#POSIX_FLAGS := -D_POSIX_C_SOURCE=200809L
 
-LDFLAGS     := -flto -Wl,--gc-sections
-LIBS        := 
+CFLAGS_SRC := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP $(INCLUDES)
+CFLAGS_LIB := $(CFLAGS_BASE) -w $(INCLUDES)
+
+LDFLAGS :=
+LIBS    :=
 
 # ------------------------------------------------------------
 # Source and object files
 # ------------------------------------------------------------
-SRC_SERVER := $(shell find -L $(SRC_DIR)/server -type f -name '*.c' ! -path "*/jansson/*") \
-              $(shell find -L $(SRC_DIR)/lib -type f -name '*.c' ! -path "*/jansson/*")
+SRC_FILES := $(shell find $(SRC_DIR) -type f -name '*.c')
+LIB_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.c')
 
-OBJ_SERVER  := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC_SERVER))
-
-DEP_SERVER  := $(OBJ_SERVER:.o=.d)
-
-# ------------------------------------------------------------
-# Jansson integration
-# ------------------------------------------------------------
-JANSSON_SRC := $(shell find lib/jansson/ -maxdepth 1 -type f -name '*.c')
-JANSSON_OBJ := $(patsubst lib/jansson/%.c,$(BUILD_DIR)/jansson/%.o,$(JANSSON_SRC))
-OBJ_SERVER  += $(JANSSON_OBJ)
+OBJ_SRC := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC_FILES))
+OBJ_LIB := $(patsubst %.c,$(BUILD_DIR)/%.o,$(LIB_FILES))
+OBJ     := $(OBJ_SRC) $(OBJ_LIB)
 
 # ------------------------------------------------------------
 # Build rules
 # ------------------------------------------------------------
 .PHONY: all
-all: $(BIN_SERVER) $(BIN_CLIENT)
+all: $(BIN_SERVER)
 	@echo "Build complete. [$(BUILD_TYPE)]"
 
-$(BIN_SERVER): $(OBJ_SERVER)
-	@$(CC) $(LDFLAGS) $(OBJ_SERVER) -o $@ $(LIBS)
-
-$(BIN_CLIENT): $(OBJ_CLIENT)
-	@$(CC) $(LDFLAGS) $(OBJ_CLIENT) -o $@ $(LIBS)
-
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	@echo "Compiling $<... [$(BUILD_TYPE)]"
+# Link server binary
+$(BIN_SERVER): $(OBJ)
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(LDFLAGS) $(OBJ) -o $@ $(LIBS)
 
-$(BUILD_DIR)/jansson/%.o: lib/jansson/%.c
-	@echo "Compiling Jansson $<... [$(BUILD_TYPE)]"
+# Compile project sources (strict flags)
+$(BUILD_DIR)/src/%.o: src/%.c
+	@echo "Compiling project $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
-	@$(CC) $(JANSSON_CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS_SRC) -c $< -o $@
+
+# Compile library sources (relaxed flags)
+$(BUILD_DIR)/lib/%.o: lib/%.c
+	@echo "Compiling library $<... [$(BUILD_TYPE)]"
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS_LIB) -c $< -o $@
 
 # ------------------------------------------------------------
 # Release target
@@ -88,38 +91,9 @@ release:
 debug:
 	@$(MAKE) --no-print-directory BUILD_MODE=debug all
 
-# Run server under GDB
-.PHONY: gdb-server
-gdb-server: $(BIN_SERVER)
-	@echo "Launching server in GDB..."
-	@gdb --quiet --args ./$(BIN_SERVER)
-
-# Run client under GDB
-.PHONY: gdb-client
-gdb-client: $(BIN_CLIENT)
-	@echo "Launching client in GDB..."
-	@gdb --quiet --args ./$(BIN_CLIENT)
-
-# AddressSanitizer build (for memory debugging)
-.PHONY: asan
-asan:
-	@echo "Building with AddressSanitizer..."
-	@$(MAKE) --no-print-directory \
-		CFLAGS_BASE="-g -O1 -fsanitize=address -fno-omit-frame-pointer" \
-		LDFLAGS="-fsanitize=address" \
-		all
-
 # ------------------------------------------------------------
 # Utilities
 # ------------------------------------------------------------
-.PHONY: run-server
-run-server: $(BIN_SERVER)
-	./$(BIN_SERVER)
-
-.PHONY: run-client
-run-client: $(BIN_CLIENT)
-	./$(BIN_CLIENT)
-
 .PHONY: clean
 clean:
 	@rm -rf build
@@ -217,27 +191,6 @@ lint-ci:
 		echo "✅ Lint passed"; \
 	fi
 
-.PHONY: install-jansson
-install-jansson:
-	git clone --branch lib --single-branch https://github.com/stockholm-3/just-weather.git ../lib
-
-# ------------------------------------------------------------
-# GitHub Actions (act)
-# ------------------------------------------------------------
-.PHONY: workflow-build
-workflow-build:
-	DOCKER_HOST="$${DOCKER_HOST}" act push --job build \
-       -P ubuntu-latest=catthehacker/ubuntu:act-latest
-
-.PHONY: workflow-format
-workflow-format:
-	DOCKER_HOST="$${DOCKER_HOST}" act push --job format-check \
-       -P ubuntu-latest=teeks99/clang-ubuntu:19
-
-.PHONY: workflow
-workflow: workflow-build workflow-format
-
-# ------------------------------------------------------------
-# Dependencies
-# ------------------------------------------------------------
--include $(DEP_SERVER)
+.PHONY: install-lib
+install-lib:
+	git clone https://github.com/stockholm-3/lib.git ../lib
