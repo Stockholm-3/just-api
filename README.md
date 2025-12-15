@@ -44,15 +44,9 @@ This will create a lib folder outside of the root with all library source files.
 
 The project uses a symlink to access the Jansson library. The symlink should point to:
 ```bash
-lib/jansson -> ../../lib/jansson
+lib/ -> ../../lib/jansson
 ```
 More symmlinks may be added in the future.
-
-If the symlink is broken or missing, recreate it from the project root:
-```bash
-rm lib/jansson
-ln -s ../../lib/jansson lib/
-```
 
 3. Run the server:
 ```bash
