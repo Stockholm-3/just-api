@@ -42,9 +42,9 @@ make install-lib
 ```
 This will create a lib folder outside of the root with all library source files.
 
-The project uses a symlink to access the Jansson library. The symlink should point to:
+The project uses a symlink to access our library and Jansson. The symlink should point to:
 ```bash
-lib/ -> ../../lib/jansson
+lib/ -> ../lib/
 ```
 More symmlinks may be added in the future.
 
