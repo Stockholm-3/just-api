@@ -31,7 +31,7 @@ static bool g_initialized = false;
  * @brief Pointer to the popular cities database for fast lookups.
  * @internal
  */
-static PopularCitiesDB* s_popular_cities_db = NULL;
+static PopularCitiesDB* g_wlh_popular_cities_db = NULL;
 
 /**
  * @brief External reference to geocoding API's global popular cities DB
@@ -89,7 +89,7 @@ static int ensure_initialized(void) {
     /* Load popular cities database */
     int cities_result =
         popular_cities_load("./data/hot_cities.json", "./data/all_cities.json",
-                            &s_popular_cities_db);
+                            &g_wlh_popular_cities_db);
 
     if (cities_result != 0) {
         fprintf(stderr,
@@ -100,7 +100,7 @@ static int ensure_initialized(void) {
     } else {
         printf("[WEATHER_LOCATION] Loaded popular cities database\n");
         /* Set the global pointer for geocoding_api to use */
-        g_popular_cities_db = s_popular_cities_db;
+        g_popular_cities_db = g_wlh_popular_cities_db;
     }
 
     g_initialized = true;
@@ -446,9 +446,9 @@ void weather_location_handler_cleanup(void) {
     open_meteo_handler_cleanup();
 
     /* Cleanup popular cities database */
-    if (s_popular_cities_db) {
-        popular_cities_free(s_popular_cities_db);
-        s_popular_cities_db = NULL;
+    if (g_wlh_popular_cities_db) {
+        popular_cities_free(g_wlh_popular_cities_db);
+        g_wlh_popular_cities_db = NULL;
         g_popular_cities_db = NULL;
     }
 
