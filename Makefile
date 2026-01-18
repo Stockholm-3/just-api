@@ -47,7 +47,7 @@ LIBS    :=
 # Source and object files
 # ------------------------------------------------------------
 SRC_FILES := $(shell find $(SRC_DIR) -type f -name '*.c')
-LIB_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.c')
+LIB_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.c' ! -path '*/weather/*')
 
 OBJ_SRC := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC_FILES))
 OBJ_LIB := $(patsubst %.c,$(BUILD_DIR)/%.o,$(LIB_FILES))
