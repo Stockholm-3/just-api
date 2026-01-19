@@ -4,12 +4,10 @@
 #define OPEN_METEO_API_H
 
 #include <stdbool.h>
-#include <time.h>
 
 /* Weather data structure */
 typedef struct {
-    time_t timestamp;
-    int    weather_code;
+    int weather_code;
 
     double temperature;
     char   temperature_unit[16];
@@ -17,17 +15,14 @@ typedef struct {
     double windspeed;
     char   windspeed_unit[16];
 
-    int  winddirection;
-    char winddirection_unit[16];
+    int winddirection;
 
     double precipitation;
-    char   precipitation_unit[16];
 
     double humidity;
     double pressure;
     int    is_day;
 
-    char  city_name[128];
     float latitude;
     float longitude;
 
@@ -66,10 +61,6 @@ const char* open_meteo_api_get_description(int weather_code);
 
 /* Get wind direction name from degrees (North, South-Southeast, etc.) */
 const char* open_meteo_api_get_wind_direction(int degrees);
-
-/* Build JSON response for HTTP */
-char* open_meteo_api_build_json_response(WeatherData* data, float lat,
-                                         float lon);
 
 /* Parse query parameters: lat=X&long=Y or lat=X&lon=Y */
 int open_meteo_api_parse_query(const char* query, float* lat, float* lon);

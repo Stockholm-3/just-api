@@ -304,50 +304,6 @@ const char* open_meteo_api_get_description(int weather_code) {
         .description;
 }
 
-char* open_meteo_api_build_json_response(WeatherData* data, float lat,
-                                         float lon) {
-    if (!data) {
-        return NULL;
-    }
-
-    char* cache_file = generate_cache_filepath(lat, lon);
-    if (!cache_file) {
-        return NULL;
-    }
-
-    json_error_t error;
-    json_t*      root = json_load_file(cache_file, 0, &error);
-    free(cache_file);
-
-    if (!root) {
-        return NULL;
-    }
-
-    json_t* current = json_object_get(root, "current");
-    if (current) {
-        json_t* weather_code = json_object_get(current, "weather_code");
-        if (weather_code && json_is_integer(weather_code)) {
-            int code = json_integer_value(weather_code);
-            json_object_set_new(
-                current, "weather_description",
-                json_string(open_meteo_api_get_description(code)));
-        }
-
-        json_t* wind_direction = json_object_get(current, "wind_direction_10m");
-        if (wind_direction && json_is_integer(wind_direction)) {
-            int degrees = json_integer_value(wind_direction);
-            json_object_set_new(
-                current, "wind_direction_name",
-                json_string(open_meteo_api_get_wind_direction(degrees)));
-        }
-    }
-
-    char* json_str = json_dumps(root, JSON_INDENT(2) | JSON_PRESERVE_ORDER);
-    json_decref(root);
-
-    return json_str;
-}
-
 int open_meteo_api_parse_query(const char* query, float* lat, float* lon) {
     if (!query || !lat || !lon) {
         return -1;
@@ -493,8 +449,6 @@ static int load_weather_from_cache(const char* filepath, WeatherData** data) {
         strcpy((*data)->windspeed_unit, "km/h");
     }
 
-    (*data)->timestamp = time(NULL);
-
     json_t* latitude  = json_object_get(root, "latitude");
     json_t* longitude = json_object_get(root, "longitude");
 
@@ -627,7 +581,6 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
         strcpy(data->windspeed_unit, "km/h");
     }
 
-    data->timestamp = time(NULL);
     data->latitude  = lat;
     data->longitude = lon;
 
