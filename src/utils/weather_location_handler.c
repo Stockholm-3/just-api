@@ -449,7 +449,7 @@ void weather_location_handler_cleanup(void) {
     if (g_wlh_popular_cities_db) {
         popular_cities_free(g_wlh_popular_cities_db);
         g_wlh_popular_cities_db = NULL;
-        g_popular_cities_db = NULL;
+        g_popular_cities_db     = NULL;
     }
 
     g_initialized = false;
