@@ -1,12 +1,11 @@
+#include <cache_utils/file_cache.h>
 #include <errno.h>
-#include <hash_md5.h>
 #include <http_client.h>
 #include <jansson.h>
 #include <open_meteo_api.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <time.h>
 
 /* ============= Configuration ============= */
@@ -20,6 +19,9 @@
 static WeatherConfig g_config = {.cache_dir = DEFAULT_CACHE_DIR,
                                  .cache_ttl = DEFAULT_CACHE_TTL,
                                  .use_cache = true};
+
+/* Cache instance */
+static FileCacheInstance* g_weather_cache = NULL;
 
 /* ============= Internal Structures ============= */
 
@@ -36,10 +38,7 @@ typedef struct {
 static void  http_fetch_callback(const char* event, const char* response);
 static int   fetch_url_sync(const char* url, char** response_data,
                             int* http_status);
-static char* generate_cache_filepath(float lat, float lon);
-static int   is_cache_valid(const char* filepath, int ttl_seconds);
-static int   load_weather_from_cache(const char* filepath, WeatherData** data);
-static int   save_raw_json_to_cache(const char* filepath, const char* json_str);
+static int   load_weather_from_json(json_t* root, WeatherData** data);
 static int   fetch_weather_from_api(Location* location, WeatherData** data);
 static char* build_api_url(float lat, float lon);
 static int   parse_weather_json(const char* json_str, WeatherData* data,
@@ -119,41 +118,6 @@ const char* open_meteo_api_get_wind_direction(int degrees) {
     }
 }
 
-/* ============= Helper Functions ============= */
-
-static int mkdir_recursive(const char* path, mode_t mode) {
-    char   tmp[512];
-    char*  p = NULL;
-    size_t len;
-
-    snprintf(tmp, sizeof(tmp), "%s", path);
-    len = strlen(tmp);
-
-    if (tmp[len - 1] == '/') {
-        tmp[len - 1] = 0;
-    }
-
-    for (p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = 0;
-            if (mkdir(tmp, mode) != 0) {
-                if (errno != EEXIST) {
-                    return -1;
-                }
-            }
-            *p = '/';
-        }
-    }
-
-    if (mkdir(tmp, mode) != 0) {
-        if (errno != EEXIST) {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
 /* ============= HTTP Client Integration ============= */
 
 static HttpFetchContext* g_fetch_context = NULL;
@@ -219,8 +183,14 @@ int open_meteo_api_init(WeatherConfig* config) {
 
     g_config = *config;
 
-    if (mkdir_recursive(g_config.cache_dir, 0755) != 0) {
-        fprintf(stderr, "[METEO] Warning: Failed to create cache directory\n");
+    /* Initialize cache */
+    FileCacheConfig cache_cfg = {.cache_dir   = g_config.cache_dir,
+                                 .ttl_seconds = g_config.cache_ttl,
+                                 .enabled     = g_config.use_cache};
+
+    g_weather_cache = file_cache_create(&cache_cfg);
+    if (!g_weather_cache) {
+        fprintf(stderr, "[METEO] Warning: Failed to initialize cache\n");
     }
 
     printf("[METEO] API initialized (http_client mode)\n");
@@ -237,23 +207,31 @@ int open_meteo_api_get_current(Location* location, WeatherData** data) {
         return -1;
     }
 
-    char* cache_file =
-        generate_cache_filepath(location->latitude, location->longitude);
-    if (!cache_file) {
-        fprintf(stderr, "[METEO] Failed to generate cache filepath\n");
+    /* Generate cache key from coordinates */
+    char key_input[256];
+    snprintf(key_input, sizeof(key_input), "weather_%.6f_%.6f",
+             location->latitude, location->longitude);
+
+    char cache_key[FILE_CACHE_KEY_LENGTH];
+    if (file_cache_generate_key(g_weather_cache, key_input, cache_key,
+                                sizeof(cache_key)) != FILE_CACHE_OK) {
+        fprintf(stderr, "[METEO] Failed to generate cache key\n");
         return -2;
     }
 
-    printf("[METEO] Cache file: %s\n", cache_file);
-
-    if (g_config.use_cache && is_cache_valid(cache_file, g_config.cache_ttl)) {
+    /* Check cache */
+    if (g_config.use_cache && file_cache_is_valid(g_weather_cache, cache_key)) {
         printf("[METEO] Cache HIT\n");
 
-        int result = load_weather_from_cache(cache_file, data);
-        free(cache_file);
+        json_t* cached_json = NULL;
+        if (file_cache_load_json(g_weather_cache, cache_key,
+                                 (void**)&cached_json) == FILE_CACHE_OK) {
+            int result = load_weather_from_json(cached_json, data);
+            json_decref(cached_json);
 
-        if (result == 0) {
-            return 0;
+            if (result == 0) {
+                return 0;
+            }
         }
 
         fprintf(stderr, "[METEO] Cache load failed\n");
@@ -265,17 +243,22 @@ int open_meteo_api_get_current(Location* location, WeatherData** data) {
 
     if (result != 0) {
         fprintf(stderr, "[METEO] API fetch failed\n");
-        free(cache_file);
         return -3;
     }
 
+    /* Save to cache */
     if (g_config.use_cache && (*data)->_raw_json_cache) {
-        save_raw_json_to_cache(cache_file, (*data)->_raw_json_cache);
+        json_error_t error;
+        json_t*      json = json_loadb((*data)->_raw_json_cache,
+                                       strlen((*data)->_raw_json_cache), 0, &error);
+        if (json) {
+            file_cache_save_json(g_weather_cache, cache_key, json);
+            json_decref(json);
+        }
         free((*data)->_raw_json_cache);
         (*data)->_raw_json_cache = NULL;
     }
 
-    free(cache_file);
     return 0;
 }
 
@@ -288,7 +271,13 @@ void open_meteo_api_free_current(WeatherData* data) {
     }
 }
 
-void open_meteo_api_cleanup(void) { printf("[METEO] API cleaned up\n"); }
+void open_meteo_api_cleanup(void) {
+    if (g_weather_cache) {
+        file_cache_destroy(g_weather_cache);
+        g_weather_cache = NULL;
+    }
+    printf("[METEO] API cleaned up\n");
+}
 
 const char* open_meteo_api_get_description(int weather_code) {
     for (size_t i = 0;
@@ -336,49 +325,16 @@ int open_meteo_api_parse_query(const char* query, float* lat, float* lon) {
 
 /* ============= Internal Functions ============= */
 
-static char* generate_cache_filepath(float lat, float lon) {
-    char cache_key[256];
-    snprintf(cache_key, sizeof(cache_key), "weather_%.6f_%.6f", lat, lon);
-
-    char hash[HASH_MD5_STRING_LENGTH];
-    if (hash_md5_string(cache_key, strlen(cache_key), hash, sizeof(hash)) !=
-        0) {
-        return NULL;
-    }
-
-    char* filepath = malloc(512);
-    if (!filepath) {
-        return NULL;
-    }
-
-    snprintf(filepath, 512, "%s/%s.json", g_config.cache_dir, hash);
-    return filepath;
-}
-
-static int is_cache_valid(const char* filepath, int ttl_seconds) {
-    struct stat file_stat;
-
-    if (stat(filepath, &file_stat) != 0) {
-        return 0;
-    }
-
-    time_t now = time(NULL);
-    double age = difftime(now, file_stat.st_mtime);
-
-    return (age <= ttl_seconds);
-}
-
-static int load_weather_from_cache(const char* filepath, WeatherData** data) {
-    json_error_t error;
-    json_t*      root = json_load_file(filepath, 0, &error);
-
+/**
+ * Load weather data from parsed JSON object
+ */
+static int load_weather_from_json(json_t* root, WeatherData** data) {
     if (!root) {
         return -1;
     }
 
     *data = (WeatherData*)calloc(1, sizeof(WeatherData));
     if (!*data) {
-        json_decref(root);
         return -2;
     }
 
@@ -386,12 +342,11 @@ static int load_weather_from_cache(const char* filepath, WeatherData** data) {
     json_t* current_units = json_object_get(root, "current_units");
 
     if (!current || !current_units) {
-        json_decref(root);
         free(*data);
         return -3;
     }
 
-    // Parse all weather data fields
+    /* Parse all weather data fields */
     json_t* temp = json_object_get(current, "temperature_2m");
     if (temp) {
         (*data)->temperature = json_real_value(temp);
@@ -459,28 +414,6 @@ static int load_weather_from_cache(const char* filepath, WeatherData** data) {
         (*data)->longitude = json_real_value(longitude);
     }
 
-    json_decref(root);
-    return 0;
-}
-
-static int save_raw_json_to_cache(const char* filepath, const char* json_str) {
-    if (!filepath || !json_str) {
-        return -1;
-    }
-
-    json_error_t error;
-    json_t*      json = json_loadb(json_str, strlen(json_str), 0, &error);
-    if (!json) {
-        return -2;
-    }
-
-    if (json_dump_file(json, filepath, JSON_INDENT(2) | JSON_PRESERVE_ORDER) !=
-        0) {
-        json_decref(json);
-        return -3;
-    }
-
-    json_decref(json);
     return 0;
 }
 
