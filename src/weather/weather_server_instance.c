@@ -11,10 +11,7 @@
 
 #include "weather_server_instance.h"
 
-#include "open_meteo_handler.h"
-#include "response_builder.h"
 #include "routes.h"
-#include "weather_location_handler.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,6 +83,9 @@ int weather_server_instance_initiate_ptr(HTTPServerConnection*   connection,
     return 0;
 }
 
+/**
+ * @brief Callback from http_server_connection that handles all routes
+ */
 int weather_server_instance_on_request(void* context) {
     WeatherServerInstance* inst = (WeatherServerInstance*)context;
     HTTPServerConnection*  conn = inst->connection;
