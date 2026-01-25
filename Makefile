@@ -184,3 +184,23 @@ lint-ci:
 .PHONY: install-lib
 install-lib:
 	git clone https://github.com/stockholm-3/lib.git ../lib
+# ------------------------------------------------------------
+# Documentation
+# ------------------------------------------------------------
+.PHONY: docs
+docs:
+	@echo "Generating documentation..."
+	@doxygen
+	@echo "Documentation generated in documentation/html/index.html"
+
+.PHONY: docs-clean
+docs-clean:
+	@echo "Removing documentation..."
+	@rm -rf documentation
+	@echo "Documentation removed."
+
+.PHONY : docs-open
+docs-open:
+	@echo "Opening documentation..."
+	@xdg-open documentation/html/index.html
+	@echo "Documentation opened in default browser."
