@@ -5,6 +5,7 @@ weather_cache.json
 cache/
 compile_commands.json
 cities/
+documentation/*
 
 # Prerequisites
 *.d
