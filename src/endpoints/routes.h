@@ -5,6 +5,7 @@
 #include "endpoints/weather.h"
 
 #include <http_utils.h>
+#include <stdio.h>
 
 // -------------------------
 // Routing table

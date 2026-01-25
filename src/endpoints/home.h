@@ -1,4 +1,5 @@
 #include <http_utils.h>
+#include <string.h>
 
 int handle_homepage(HTTPServerConnection* conn, const char* query) {
     const char* html = "<!DOCTYPE html>"
