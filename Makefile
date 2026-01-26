@@ -46,7 +46,7 @@ LIBS    :=
 # ------------------------------------------------------------
 # Source and object files
 # ------------------------------------------------------------
-SRC_FILES := $(shell find $(SRC_DIR) -type f -name '*.c')
+SRC_FILES := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*')
 LIB_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.c' ! -path '*/weather/*')
 
 OBJ_SRC := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC_FILES))
@@ -54,11 +54,31 @@ OBJ_LIB := $(patsubst %.c,$(BUILD_DIR)/%.o,$(LIB_FILES))
 OBJ     := $(OBJ_SRC) $(OBJ_LIB)
 
 # ------------------------------------------------------------
+# Watchdog binary
+# ------------------------------------------------------------
+WATCHDOG_SRC := src/watchdog/jws_watchdog.c
+WATCHDOG_OBJ := $(BUILD_DIR)/src/watchdog/jws_watchdog.o
+WATCHDOG_BIN := $(BUILD_DIR)/jws-watchdog
+
+# ------------------------------------------------------------
 # Build rules
 # ------------------------------------------------------------
 .PHONY: all
-all: $(BIN)
+all: $(BIN) $(WATCHDOG_BIN)
 	@echo "Build complete. [$(BUILD_TYPE)]"
+
+.PHONY: watchdog
+watchdog: $(WATCHDOG_BIN)
+	@echo "Watchdog build complete. [$(BUILD_TYPE)]"
+
+$(WATCHDOG_BIN): $(WATCHDOG_OBJ)
+	@mkdir -p $(dir $@)
+	@$(CC) $(LDFLAGS) $< -o $@
+
+$(WATCHDOG_OBJ): $(WATCHDOG_SRC)
+	@echo "Compiling watchdog $<... [$(BUILD_TYPE)]"
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS_SRC) -c $< -o $@
 
 # Link server binary
 $(BIN): $(OBJ)
@@ -204,3 +224,57 @@ docs-open:
 	@echo "Opening documentation..."
 	@xdg-open documentation/html/index.html
 	@echo "Documentation opened in default browser."
+
+# ------------------------------------------------------------
+# Daemon management
+# ------------------------------------------------------------
+.PHONY: daemon-start
+daemon-start: $(WATCHDOG_BIN) $(BIN)
+	@if [ -f /tmp/jws-watchdog.pid ]; then \
+		PID=$$(cat /tmp/jws-watchdog.pid); \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "Watchdog already running (PID $$PID)"; \
+			exit 1; \
+		fi; \
+	fi
+	@echo "Starting watchdog daemon..."
+	@$(WATCHDOG_BIN) --server $(BIN)
+	@sleep 1
+	@if [ -f /tmp/jws-watchdog.pid ]; then \
+		echo "Watchdog started (PID $$(cat /tmp/jws-watchdog.pid))"; \
+	fi
+
+.PHONY: daemon-stop
+daemon-stop:
+	@if [ -f /tmp/jws-watchdog.pid ]; then \
+		PID=$$(cat /tmp/jws-watchdog.pid); \
+		echo "Stopping watchdog (PID $$PID)..."; \
+		kill $$PID 2>/dev/null || true; \
+		sleep 2; \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "Force killing..."; \
+			kill -9 $$PID 2>/dev/null || true; \
+		fi; \
+		rm -f /tmp/jws-watchdog.pid; \
+		echo "Stopped."; \
+	else \
+		echo "Watchdog not running."; \
+	fi
+
+.PHONY: daemon-status
+daemon-status:
+	@if [ -f /tmp/jws-watchdog.pid ]; then \
+		PID=$$(cat /tmp/jws-watchdog.pid); \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "Watchdog running (PID $$PID)"; \
+			SERVER_PID=$$(pgrep -P $$PID just-weather 2>/dev/null || echo "none"); \
+			echo "Server PID: $$SERVER_PID"; \
+		else \
+			echo "Watchdog not running (stale PID file)"; \
+		fi; \
+	else \
+		echo "Watchdog not running."; \
+	fi
+
+.PHONY: daemon-restart
+daemon-restart: stop-daemon start-daemon
