@@ -46,7 +46,7 @@ LIBS    :=
 # ------------------------------------------------------------
 # Source and object files
 # ------------------------------------------------------------
-SRC_FILES := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*')
+SRC_FILES := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*')
 LIB_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.c' ! -path '*/weather/*')
 
 OBJ_SRC := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC_FILES))
@@ -278,3 +278,19 @@ daemon-status:
 
 .PHONY: daemon-restart
 daemon-restart: stop-daemon start-daemon
+
+# Client standalone build
+.PHONY: run-client
+run-client:
+	@echo "Building and running weather client..."
+	@gcc -Wall -Wextra -std=c99 -D_POSIX_C_SOURCE=200809L \
+		-DWEATHER_CLIENT_MAIN \
+		-I./src/client -Iincludes \
+		$(shell pkg-config --cflags libcurl) \
+		src/client/weather_client.c \
+		src/client/weather_client_smw.c \
+		$(shell pkg-config --libs libcurl) -ljansson -lm \
+		-o /tmp/weather_client && /tmp/weather_client http://localhost:10680/v1 Stockholm SE
+
+.PHONY: start-client
+start-client: run-client

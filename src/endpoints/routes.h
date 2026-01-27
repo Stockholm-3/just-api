@@ -1,6 +1,7 @@
 #include "endpoints/citites.h"
 #include "endpoints/current.h"
 #include "endpoints/echo.h"
+#include "endpoints/forecast.h"
 #include "endpoints/home.h"
 #include "endpoints/weather.h"
 
@@ -25,6 +26,7 @@ Route g_routes[] = {
     {"POST", "/echo", handle_echo},
     {"GET", "/v1/weather", handle_weather_by_city},
     {"GET", "/v1/current", handle_current_weather},
+    {"GET", "/v1/forecast", handle_forecast},
     {"GET", "/v1/cities", handle_city_search},
 };
 
