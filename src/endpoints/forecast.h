@@ -7,6 +7,7 @@
 #define FORECAST_H
 
 #include "open_meteo_handler.h"
+
 #include <http_utils.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +18,8 @@
  * @param query Query string with city, country, and days parameters
  * @return 0 on success, -1 on error
  */
-static inline int handle_forecast_weather(HTTPServerConnection* conn, const char* query) {
+static inline int handle_forecast_weather(HTTPServerConnection* conn,
+                                          const char*           query) {
     char* json_response = NULL;
     int   status_code   = 0;
 
