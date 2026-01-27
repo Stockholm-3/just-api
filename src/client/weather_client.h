@@ -17,7 +17,8 @@
  * @param status_code HTTP status code
  * @param user_data User-provided context data
  */
-typedef void (*weather_callback_t)(char* response, int status_code, void* user_data);
+typedef void (*weather_callback_t)(char* response, int status_code,
+                                   void* user_data);
 
 /**
  * @brief Request state for state machine worker
@@ -37,13 +38,13 @@ typedef enum {
  * @brief Async weather request context
  */
 typedef struct {
-    char* base_url;
-    char* endpoint;
-    char* query;
+    char*              base_url;
+    char*              endpoint;
+    char*              query;
     weather_callback_t callback;
-    void* user_data;
-    request_state_t state;
-    uint64_t start_time;
+    void*              user_data;
+    request_state_t    state;
+    uint64_t           start_time;
 } weather_request_t;
 
 /**
@@ -62,7 +63,7 @@ int weather_client_init(const char* base_url);
  * @return 0 on success, -1 on error
  */
 int weather_client_current_async(const char* city, const char* country_code,
-                                  weather_callback_t callback, void* user_data);
+                                 weather_callback_t callback, void* user_data);
 
 /**
  * @brief Fetch weather forecast asynchronously
@@ -73,8 +74,9 @@ int weather_client_current_async(const char* city, const char* country_code,
  * @param user_data User context
  * @return 0 on success, -1 on error
  */
-int weather_client_forecast_async(const char* city, const char* country_code, int days,
-                                   weather_callback_t callback, void* user_data);
+int weather_client_forecast_async(const char* city, const char* country_code,
+                                  int days, weather_callback_t callback,
+                                  void* user_data);
 
 /**
  * @brief Process pending async requests

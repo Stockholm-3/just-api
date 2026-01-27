@@ -10,11 +10,11 @@
 
 /**
  * @brief State machine worker - process one step of each request
- * 
+ *
  * Iterates through all queued requests and advances their state machine.
  * Each call processes one state transition per request, allowing for
  * step-by-step async execution with full visibility into the request lifecycle.
- * 
+ *
  * @param requests Array of weather requests
  * @param request_count Number of requests in the array
  * @param current_time Current time in milliseconds (for timing metrics)
