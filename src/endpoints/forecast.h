@@ -23,8 +23,9 @@ static inline int handle_forecast_weather(HTTPServerConnection* conn,
     char* json_response = NULL;
     int   status_code   = 0;
 
-    // Call forecast handler with query parameters
-    open_meteo_handler_forecast(query, &json_response, &status_code);
+    // TODO: Implement actual forecast handler
+    // For now, use current weather handler as placeholder
+    open_meteo_handler_current(query, &json_response, &status_code);
 
     if (!json_response) {
         return send_json_error(
