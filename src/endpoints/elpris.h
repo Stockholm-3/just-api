@@ -10,10 +10,14 @@ typedef struct {
     HTTPServerConnection* conn;
 } ElprisRouteContext;
 
-// Callback for the router
 static int elpris_route_callback(char* json_data, void* ctx) {
     ElprisRouteContext* context = (ElprisRouteContext*)ctx;
     if (context && context->conn) {
+        if (!json_data) {
+            send_json_error(context->conn, 404, "no data that matches query");
+            free(context);
+            return 0;
+        };
         send_response(context->conn, 200, "application/json", json_data,
                       strlen(json_data));
     }
@@ -21,7 +25,6 @@ static int elpris_route_callback(char* json_data, void* ctx) {
     return 0;
 }
 
-// Router handler
 int handle_elpris_route(HTTPServerConnection* conn, const char* query) {
     ElprisRouteContext* ctx = malloc(sizeof(ElprisRouteContext));
     if (!ctx) {
@@ -30,6 +33,5 @@ int handle_elpris_route(HTTPServerConnection* conn, const char* query) {
 
     ctx->conn = conn;
 
-    // Example fixed date, could parse from query parameters
-    return elpris_api_fetch_async(2026, 1, 28, elpris_route_callback, ctx);
+    return elpris_api_fetch_query_async(query, elpris_route_callback, ctx);
 }
