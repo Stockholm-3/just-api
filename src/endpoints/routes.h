@@ -1,6 +1,7 @@
 #include "endpoints/citites.h"
 #include "endpoints/current.h"
 #include "endpoints/echo.h"
+#include "endpoints/elpris.h"
 #include "endpoints/home.h"
 #include "endpoints/weather.h"
 
@@ -26,6 +27,7 @@ Route g_routes[] = {
     {"GET", "/v1/weather", handle_weather_by_city},
     {"GET", "/v1/current", handle_current_weather},
     {"GET", "/v1/cities", handle_city_search},
+    {"GET", "/v1/elpris", handle_elpris_route},
 };
 
 #define ROUTE_COUNT (sizeof(g_routes) / sizeof(g_routes[0]))
