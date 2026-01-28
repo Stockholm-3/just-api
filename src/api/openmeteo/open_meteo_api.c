@@ -35,7 +35,8 @@ typedef struct {
 
 /* ============= Internal Functions ============= */
 
-static void  http_fetch_callback(const char* event, const char* response);
+static void  http_fetch_callback(const char* event, const char* response,
+                                 void* context);
 static int   fetch_url_sync(const char* url, char** response_data,
                             int* http_status);
 static int   load_weather_from_json(json_t* root, WeatherData** data);
@@ -122,7 +123,8 @@ const char* open_meteo_api_get_wind_direction(int degrees) {
 
 static HttpFetchContext* g_fetch_context = NULL;
 
-static void http_fetch_callback(const char* event, const char* response) {
+static void http_fetch_callback(const char* event, const char* response,
+                                void* context) {
     if (!g_fetch_context) {
         return;
     }
@@ -143,7 +145,7 @@ static int fetch_url_sync(const char* url, char** response_data,
     HttpFetchContext context = {0};
     g_fetch_context          = &context;
 
-    http_client_get(url, 30000, http_fetch_callback, NULL);
+    http_client_get(url, NULL, 30000, http_fetch_callback, NULL);
 
     // Poll event loop - fast iterations, no sleep!
     time_t start_time      = time(NULL);
