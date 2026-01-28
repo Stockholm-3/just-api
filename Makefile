@@ -41,7 +41,7 @@ CFLAGS_SRC := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP $(INCLUDES)
 CFLAGS_LIB := $(CFLAGS_BASE) -w $(INCLUDES)
 
 LDFLAGS :=
-LIBS    :=
+LIBS    := -lmbedtls -lmbedx509 -lmbedcrypto
 
 # ------------------------------------------------------------
 # Source and object files
