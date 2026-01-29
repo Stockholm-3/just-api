@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libcurl4-openssl-dev bear
+          sudo apt-get install -y build-essential libcurl4-openssl-dev bear libmbedtls-dev
           #install jansson from source
           make install-lib
 
