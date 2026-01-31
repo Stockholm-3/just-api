@@ -2,27 +2,24 @@
 
 #include <file_cache.h>
 #include <http_client.h>
+#include <http_utils.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #define BASE_URL "https://www.elprisetjustnu.se/api/v1/prices/"
-
-/*10 years*/
-#define HISTORICAL_CACHE_TTL (60 * 60 * 24 * 365 * 10)
+#define DEFAULT_CACHE_DIR ".cache/elpris_latest"
+#define HISTORICAL_CACHE_TTL (60 * 60 * 24 * 365 * 10) /* 10 years */
 
 static FileCacheInstance* g_latest_cache     = NULL;
 static FileCacheInstance* g_historical_cache = NULL;
 
-/**
- * @brief Determines if a given UTC time is within Swedish Daylight Saving Time.
- *
- * Sweden observes DST: last Sunday of March → last Sunday of October.
- *
- * @param utc Pointer to a struct tm in UTC.
- * @return 1 if DST, 0 if standard time.
- */
+/* ============================================================================
+ * Swedish Time Utilities
+ * ========================================================================= */
+
 static int is_swedish_dst(const struct tm* utc) {
     int year = utc->tm_year + 1900;
 
@@ -44,33 +41,20 @@ static int is_swedish_dst(const struct tm* utc) {
     return now >= dst_start && now < dst_end;
 }
 
-/**
- * @brief Fills a struct tm with the current Swedish local time (CET/CEST).
- *
- * @param out Pointer to struct tm to populate.
- */
-static void swedish_time_from_utc(struct tm* out) {
-    time_t now = time(NULL);
-
+static void swedish_time_now(struct tm* out) {
+    time_t    now = time(NULL);
     struct tm utc;
     gmtime_r(&now, &utc);
 
     int offset_hours = is_swedish_dst(&utc) ? 2 : 1;
-    now += offset_hours * 3600;
+    now += (time_t)(offset_hours * 3600);
 
     gmtime_r(&now, out);
 }
 
-/**
- * @brief Computes seconds until next Swedish 13:00.
- *
- * Used for latest cache expiration.
- *
- * @return Number of seconds until next 13:00 Swedish time.
- */
 static int seconds_until_next_13(void) {
     struct tm se;
-    swedish_time_from_utc(&se);
+    swedish_time_now(&se);
 
     struct tm target = se;
     target.tm_hour   = 13;
@@ -88,23 +72,12 @@ static int seconds_until_next_13(void) {
     return (int)difftime(cutoff, now);
 }
 
-/**
- * @brief Computes the "latest Elpris date" for a given price group.
- *
- * Rules:
- * - Before 13:00 → today
- * - After 13:00 → tomorrow
- *
- * @param year Pointer to store year
- * @param month Pointer to store month
- * @param day Pointer to store day
- */
-static void get_latest_elpris_date(unsigned int* year, unsigned int* month,
-                                   unsigned int* day) {
+static void get_latest_date(unsigned int* year, unsigned int* month,
+                            unsigned int* day) {
     struct tm se;
-    swedish_time_from_utc(&se);
+    swedish_time_now(&se);
 
-    /* After 13:00 → tomorrow’s prices */
+    /* After 13:00, tomorrow's prices */
     if (se.tm_hour >= 13) {
         se.tm_mday += 1;
         mktime(&se);
@@ -115,37 +88,21 @@ static void get_latest_elpris_date(unsigned int* year, unsigned int* month,
     *day   = se.tm_mday;
 }
 
-/**
- * @brief Checks if a given date is the current “latest Elpris date”.
- *
- * @param year Year
- * @param month Month
- * @param day Day
- * @return 1 if latest, 0 otherwise
- */
-static int is_latest_date(unsigned int year, unsigned int month,
-                          unsigned int day) {
-    unsigned int ly, lm, ld;
-    get_latest_elpris_date(&ly, &lm, &ld);
-    return (year == ly && month == lm && day == ld);
-}
+/* ============================================================================
+ * Cache Management
+ * ========================================================================= */
 
-/**
- * @brief Returns the appropriate cache instance for a given date.
- *
- * - Latest prices → g_latest_cache (expires at next 13:00)
- * - Historical prices → g_historical_cache (long TTL)
- *
- * @param year Year
- * @param month Month
- * @param day Day
- * @return Pointer to FileCacheInstance
- */
-static FileCacheInstance*
-get_cache_for_date(unsigned int year, unsigned int month, unsigned int day) {
-    if (is_latest_date(year, month, day)) {
+static FileCacheInstance* get_cache(unsigned int year, unsigned int month,
+                                    unsigned int day) {
+    unsigned int latest_year, latest_month, latest_day;
+    get_latest_date(&latest_year, &latest_month, &latest_day);
+
+    int is_latest =
+        (year == latest_year && month == latest_month && day == latest_day);
+
+    if (is_latest) {
         if (!g_latest_cache) {
-            FileCacheConfig cfg = {.cache_dir   = ".cache/elpris_latest",
+            FileCacheConfig cfg = {.cache_dir   = DEFAULT_CACHE_DIR,
                                    .ttl_seconds = seconds_until_next_13(),
                                    .enabled     = true};
             g_latest_cache      = file_cache_create(&cfg);
@@ -154,7 +111,7 @@ get_cache_for_date(unsigned int year, unsigned int month, unsigned int day) {
     }
 
     if (!g_historical_cache) {
-        FileCacheConfig cfg = {.cache_dir   = ".cache/elpris_historical",
+        FileCacheConfig cfg = {.cache_dir   = DEFAULT_CACHE_DIR,
                                .ttl_seconds = HISTORICAL_CACHE_TTL,
                                .enabled     = true};
         g_historical_cache  = file_cache_create(&cfg);
@@ -163,121 +120,35 @@ get_cache_for_date(unsigned int year, unsigned int month, unsigned int day) {
     return g_historical_cache;
 }
 
-/**
- * @brief Context passed to the HTTP client for async fetch.
- */
+/* ============================================================================
+ * Query Parsing
+ * ========================================================================= */
+
 typedef struct {
-    ElprisApiOnResponse user_callback;
-    void*               context;
-    FileCacheInstance*  cache;
-    char                cache_key[FILE_CACHE_KEY_LENGTH];
-} RequestContext;
+    unsigned int year;
+    unsigned int month;
+    unsigned int day;
+    char         price_group[4];
+    int          valid;
+} ParsedQuery;
 
-/**
- * @brief Callback invoked by HTTP client when request completes.
- *
- * Saves response to cache and invokes user callback.
- *
- * @param event Event type (e.g., "RESPONSE", "ERROR")
- * @param response Response body (JSON)
- * @param context RequestContext pointer
- */
-static void client_callback(const char* event, const char* response,
-                            void* context) {
-    RequestContext* ctx = (RequestContext*)context;
-    if (!ctx) {
-        return;
+static ParsedQuery parse_query(const char* query) {
+    ParsedQuery result = {0};
+
+    if (!query || query[0] == '\0' || strcmp(query, "?") == 0) {
+        return result;
     }
 
-    if (strcmp(event, "RESPONSE") == 0 && response &&
-        (response[0] == '[' || response[0] == '{')) {
-
-        if (ctx->cache) {
-            file_cache_save(ctx->cache, ctx->cache_key, response,
-                            strlen(response));
-        }
-
-        ctx->user_callback((char*)response, ctx->context);
-    } else {
-        ctx->user_callback(NULL, ctx->context);
+    const char* start = (query[0] == '?') ? query + 1 : query;
+    char*       copy  = strdup(start);
+    if (!copy) {
+        return result;
     }
 
-    free(ctx);
-}
+    int   has_price = 0;
+    char* token     = strtok(copy, "&");
 
-int elpris_api_fetch_async(unsigned int year, unsigned int month,
-                           unsigned int day, char price_group[3],
-                           ElprisApiOnResponse callback, void* context) {
-    if (!callback || !price_group || strlen(price_group) < 2) {
-        return -1;
-    }
-
-    FileCacheInstance* cache = get_cache_for_date(year, month, day);
-
-    char key_input[128];
-    snprintf(key_input, sizeof(key_input), "%04u-%02u-%02u-%s", year, month,
-             day, price_group);
-
-    char cache_key[FILE_CACHE_KEY_LENGTH] = {0};
-
-    if (cache &&
-        file_cache_generate_key(cache, key_input, cache_key,
-                                sizeof(cache_key)) == FILE_CACHE_OK &&
-        file_cache_is_valid(cache, cache_key)) {
-
-        char* cached = NULL;
-        if (file_cache_load(cache, cache_key, &cached, NULL) == FILE_CACHE_OK) {
-
-            printf("[ELPRIS_API]: Cache hit: %s\n", key_input);
-            callback(cached, context);
-            free(cached);
-            return 0;
-        }
-    }
-
-    RequestContext* ctx = malloc(sizeof(RequestContext));
-    if (!ctx) {
-        return -1;
-    }
-
-    ctx->user_callback = callback;
-    ctx->context       = context;
-    ctx->cache         = cache;
-    strncpy(ctx->cache_key, cache_key, FILE_CACHE_KEY_LENGTH);
-
-    char url[128];
-    snprintf(url, sizeof(url), BASE_URL "%04u/%02u-%02u_%s.json", year, month,
-             day, price_group);
-
-    printf("[ELPRIS_API]: Fetching URL: %s\n", url);
-
-    return http_client_get(url, NULL, 30000, client_callback, ctx);
-}
-
-int elpris_api_fetch_query_async(const char*         query,
-                                 ElprisApiOnResponse callback, void* context) {
-    if (!callback || !query || query[0] == '\0' || strcmp(query, "?") == 0) {
-        /* Latest endpoint MUST specify price group */
-        callback(NULL, context);
-        return -1;
-    }
-
-    const char* query_start = (query[0] == '?') ? query + 1 : query;
-
-    unsigned int year = 0, month = 0, day = 0;
-    char         price_group[4] = {0};
-    int          price_found    = 0;
-
-    char* query_copy = strdup(query_start);
-    if (!query_copy) {
-        callback(NULL, context);
-        return -1;
-    }
-
-    char* token       = strtok(query_copy, "&");
-    int   parse_error = 0;
-
-    while (token && !parse_error) {
+    while (token) {
         char* equals = strchr(token, '=');
         if (equals) {
             *equals         = '\0';
@@ -285,34 +156,152 @@ int elpris_api_fetch_query_async(const char*         query,
             const char* val = equals + 1;
 
             if (strcmp(key, "date") == 0) {
-                if (sscanf(val, "%4u-%2u-%2u", &year, &month, &day) != 3) {
-                    parse_error = 1;
+                if (sscanf(val, "%4u-%2u-%2u", &result.year, &result.month,
+                           &result.day) != 3) {
+                    free(copy);
+                    return result;
                 }
             } else if (strcmp(key, "price") == 0) {
                 if (strlen(val) >= 2 && strlen(val) <= 3) {
-                    strncpy(price_group, val, 3);
-                    price_group[3] = '\0';
-                    price_found    = 1;
+                    strncpy(result.price_group, val, 3);
+                    result.price_group[3] = '\0';
+                    has_price             = 1;
                 } else {
-                    parse_error = 1;
+                    free(copy);
+                    return result;
                 }
             }
         }
         token = strtok(NULL, "&");
     }
 
-    free(query_copy);
+    free(copy);
 
-    if (parse_error || !price_found) {
-        callback(NULL, context);
+    if (!has_price) {
+        return result;
+    }
+
+    /* No date use latest */
+    if (result.year == 0) {
+        get_latest_date(&result.year, &result.month, &result.day);
+    }
+
+    result.valid = 1;
+    return result;
+}
+
+/* ============================================================================
+ * Async HTTP Handling
+ * ========================================================================= */
+
+typedef struct {
+    HTTPServerConnection* conn;
+    FileCacheInstance*    cache;
+    char                  cache_key[FILE_CACHE_KEY_LENGTH];
+} FetchContext;
+
+static void on_http_response(const char* event, const char* response,
+                             void* context) {
+    FetchContext* ctx = (FetchContext*)context;
+    if (!ctx || !ctx->conn) {
+        free(ctx);
+        return;
+    }
+
+    if (strcmp(event, "RESPONSE") == 0 && response &&
+        (response[0] == '[' || response[0] == '{')) {
+
+        /* Cache the response */
+        if (ctx->cache) {
+            file_cache_save(ctx->cache, ctx->cache_key, response,
+                            strlen(response));
+        }
+
+        /* Send to client */
+        send_response(ctx->conn, 200, "application/json", response,
+                      strlen(response));
+    } else {
+        /* Handle errors */
+        if (strcmp(event, "ERROR") == 0) {
+            printf("[ELPRIS] HTTP error: %s\n",
+                   response ? response : "unknown");
+        } else if (strcmp(event, "TIMEOUT") == 0) {
+            printf("[ELPRIS] Request timeout\n");
+        } else {
+            printf("[ELPRIS] Invalid response\n");
+        }
+
+        send_json_error(ctx->conn, 503,
+                        "Unable to fetch electricity prices. "
+                        "The date may be unavailable or the service is down.");
+    }
+
+    free(ctx);
+}
+
+/* ============================================================================
+ * Public API
+ * ========================================================================= */
+
+int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
+                                 const char*           query) {
+    if (!conn) {
         return -1;
     }
 
-    if (year == 0) {
-        /* No date → latest prices for given price group */
-        get_latest_elpris_date(&year, &month, &day);
+    /* Parse query */
+    ParsedQuery parsed = parse_query(query);
+    if (!parsed.valid) {
+        send_json_error(
+            conn, 400,
+            "Invalid query. Format: ?price=SE3&date=2024-01-15. Note: date is "
+            "optional, it will give lates price in absence");
+        return -1;
     }
 
-    return elpris_api_fetch_async(year, month, day, price_group, callback,
-                                  context);
+    /* Get cache */
+    FileCacheInstance* cache = get_cache(parsed.year, parsed.month, parsed.day);
+
+    /* Build cache key */
+    char key_input[128];
+    snprintf(key_input, sizeof(key_input), "%04u-%02u-%02u-%s", parsed.year,
+             parsed.month, parsed.day, parsed.price_group);
+
+    char cache_key[FILE_CACHE_KEY_LENGTH] = {0};
+
+    /* Check cache */
+    if (cache &&
+        file_cache_generate_key(cache, key_input, cache_key,
+                                sizeof(cache_key)) == FILE_CACHE_OK &&
+        file_cache_is_valid(cache, cache_key)) {
+
+        char* cached = NULL;
+        if (file_cache_load(cache, cache_key, &cached, NULL) == FILE_CACHE_OK) {
+            printf("[ELPRIS] Cache hit: %s\n", key_input);
+            send_response(conn, 200, "application/json", cached,
+                          strlen(cached));
+            free(cached);
+            return 0;
+        }
+    }
+
+    /* Prepare async fetch */
+    FetchContext* ctx = malloc(sizeof(FetchContext));
+    if (!ctx) {
+        send_json_error(conn, 500, "Memory allocation failed");
+        return -1;
+    }
+
+    ctx->conn  = conn;
+    ctx->cache = cache;
+    strncpy(ctx->cache_key, cache_key, FILE_CACHE_KEY_LENGTH);
+
+    /* Build URL and fetch */
+    char url[128];
+    snprintf(url, sizeof(url), BASE_URL "%04u/%02u-%02u_%s.json", parsed.year,
+             parsed.month, parsed.day, parsed.price_group);
+
+    printf("[ELPRIS] Fetching: %s\n", url);
+
+    return http_client_get(url, NULL, 30000, on_http_response, ctx);
 }
