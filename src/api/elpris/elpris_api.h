@@ -6,97 +6,86 @@
 /**
  * @brief Callback type invoked when an Elpris API request completes.
  *
- * This callback is called asynchronously when the HTTP request finishes,
- * fails, or times out.
+ * Called asynchronously when a request finishes, either from cache or live
+ * HTTP.
  *
  * @param json_data
- *        Pointer to a null-terminated JSON string returned by the API.
- *        On success, contains valid JSON data.
- *        On error or timeout, this parameter is NULL.
- *        The ownership of this pointer is NOT transferred to the caller;
- *        the data is only valid for the duration of the callback.
+ *        Null-terminated JSON string returned by the API.
+ *        - On success, contains valid JSON.
+ *        - On error, timeout, or parsing failure, this is NULL.
+ *
+ *        Ownership is NOT transferred; data is valid only for the duration
+ *        of the callback.
  *
  * @param context
- *        User-defined context pointer passed to the fetch function.
+ *        User-defined pointer passed to the fetch function.
  *
  * @return
- *        Currently unused. The return value is ignored by the API.
+ *        Currently ignored by the API.
  */
 typedef int (*ElprisApiOnResponse)(char* json_data, void* context);
 
 /**
- * @brief Fetch electricity prices asynchronously for a given date and price
+ * @brief Fetch electricity prices asynchronously for a specific date and price
  * area.
  *
- * This function initiates an HTTP GET request to the Elpris API for
- * the specified date and price area.
+ * Initiates an asynchronous request to the Elpris API. Results may be returned
+ * from an internal cache if available.
  *
- * The request is performed asynchronously. The provided callback
- * will be invoked when the request completes, fails, or times out.
- *
- * @param year
- *        Year (e.g. 2024)
- *
- * @param month
- *        Month (1–12)
- *
- * @param day
- *        Day of month (1–31)
- *
- * @param price_group
- *        3-character price area code (e.g., "SE1", "SE2", "SE3", "SE4")
- *
- * @param callback
- *        User callback function to receive the response.
- *        Must not be NULL.
- *
- * @param context
- *        Optional user-defined pointer passed through to the callback.
+ * @param year Year (e.g., 2024)
+ * @param month Month (1–12)
+ * @param day Day (1–31)
+ * @param price_group 3-character price area code (SE1–SE4)
+ * @param callback Callback to receive JSON response
+ * @param context User-defined pointer passed through to the callback
  *
  * @return
- *        0 or positive value on successful request initiation.
- *        -1 on parameter validation or memory allocation failure.
+ *        0 or positive on successful request initiation,
+ *        -1 on invalid parameters or allocation failure.
  *
  * @note
- * - The response is provided as raw JSON.
- * - On error, the callback receives NULL.
- * - The function validates date parameters but not price_group format.
+ * - Historical data (past dates) is cached for ~10 years.
+ * - Latest data (current/future day) is cached until the next daily update
+ *   at 13:00 Swedish time.
+ * - Callback may be invoked immediately if a valid cache entry exists.
+ * - On error, callback receives NULL.
  */
 int elpris_api_fetch_async(unsigned int year, unsigned int month,
                            unsigned int day, char price_group[3],
                            ElprisApiOnResponse callback, void* context);
 
 /**
- * @brief Fetch electricity prices using a query string format.
+ * @brief Fetch electricity prices using a URL query string.
  *
- * Parses a query string and initiates an HTTP request to the Elpris API.
- * Query format: "date=YYYY-MM-DD&price=XXX"
- * Example: "date=2024-12-31&price=SE3"
+ * Parses a query string and fetches data asynchronously from the Elpris API.
  *
- * The request is performed asynchronously. The provided callback
- * will be invoked when the request completes, fails, or times out.
+ * Supported query string formats:
+ * - "date=YYYY-MM-DD&price=SE3"
+ * - "?date=YYYY-MM-DD&price=SE3"
  *
- * @param query
- *        Query string containing date and price parameters.
- *        May optionally start with '?'.
- *        Must not be NULL.
+ * Latest prices (no date provided):
+ * - A price group MUST be specified.
+ * - Before 13:00 Swedish time → fetch yesterday’s prices
+ * - After 13:00 Swedish time → fetch tomorrow’s prices
  *
- * @param callback
- *        User callback function to receive the response.
- *        Must not be NULL.
- *
- * @param context
- *        Optional user-defined pointer passed through to the callback.
+ * @param query Query string containing date and price parameters
+ *              (may include leading '?').
+ * @param callback Callback to receive JSON response
+ * @param context User-defined pointer passed through to the callback
  *
  * @return
- *        0 or positive value on successful request initiation.
- *        -1 on parameter validation, parsing error, or memory allocation
- * failure.
+ *        0 or positive on successful request initiation,
+ *        -1 on parsing error, validation failure, or allocation failure.
  *
  * @note
- * - On parsing errors, the callback is invoked immediately with NULL.
- * - Price group must be 2-3 characters (e.g., "SE", "SE1", "SE2").
+ * - On parsing errors, callback is invoked immediately with NULL.
  * - Date format must be YYYY-MM-DD.
+ * - Price group must be 3 characters (SE1–SE4). Shorter strings may be accepted
+ * but are internally padded/truncated.
+ * - Latest data requires a price group; NULL or empty query without a price
+ * group is invalid.
+ * - Historical data is cached for ~10 years; latest data is cached until next
+ * 13:00.
  */
 int elpris_api_fetch_query_async(const char*         query,
                                  ElprisApiOnResponse callback, void* context);
