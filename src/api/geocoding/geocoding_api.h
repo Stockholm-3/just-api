@@ -18,31 +18,31 @@
 
 /* Structure with city information */
 typedef struct {
-    float latitude;
-    float longitude;
-    char  name[128];       /* City name */
-    char  country[64];     /* Country */
-    char  country_code[8]; /* Country code (UA, US, etc.) */
-    char  admin1[64];      /* Region / province / state */
-    char  admin2[64];      /* District */
-    int   population;      /* Population */
-    char  timezone[64];    /* Time zone */
-    int   id;              /* Place ID */
+  float latitude;
+  float longitude;
+  char name[128];       /* City name */
+  char country[64];     /* Country */
+  char country_code[8]; /* Country code (UA, US, etc.) */
+  char admin1[64];      /* Region / province / state */
+  char admin2[64];      /* District */
+  int population;       /* Population */
+  char timezone[64];    /* Time zone */
+  int id;               /* Place ID */
 } GeocodingResult;
 
 /* Structure with search results */
 typedef struct {
-    GeocodingResult* results; /* Array of results */
-    int              count;   /* Number of found results */
+  GeocodingResult *results; /* Array of results */
+  int count;                /* Number of found results */
 } GeocodingResponse;
 
 /* Configuration for the geocoding module */
 typedef struct {
-    const char* cache_dir;   /* Directory for cache files */
-    int         cache_ttl;   /* Cache TTL in seconds (default: 7 days) */
-    bool        use_cache;   /* Use cache */
-    int         max_results; /* Maximum number of results */
-    const char* language;    /* Result language (uk, en, ru, etc.) */
+  const char *cache_dir; /* Directory for cache files */
+  int cache_ttl;         /* Cache TTL in seconds (default: 7 days) */
+  bool use_cache;        /* Use cache */
+  int max_results;       /* Maximum number of results */
+  const char *language;  /* Result language (uk, en, ru, etc.) */
 } GeocodingConfig;
 
 /**
@@ -51,7 +51,7 @@ typedef struct {
  * @param config Configuration (NULL for defaults)
  * @return 0 on success, -1 on error
  */
-int geocoding_api_init(GeocodingConfig* config);
+int geocoding_api_init(GeocodingConfig *config);
 
 /**
  * Search for a city by name
@@ -66,22 +66,22 @@ int geocoding_api_init(GeocodingConfig* config);
  *   geocoding_api_search("Stockholm", NULL, &response);
  *   geocoding_api_search("London", "GB", &response);
  */
-int geocoding_api_search(const char* city_name, const char* country,
-                         GeocodingResponse** response);
+int geocoding_api_search(const char *city_name, const char *country,
+                         GeocodingResponse **response);
 
 /*
  * Search without writing to cache. Useful for endpoints that should not
  * create or update the shared city cache (e.g. autocomplete /cities).
  */
-int geocoding_api_search_no_cache(const char* city_name, const char* country,
-                                  GeocodingResponse** response);
+int geocoding_api_search_no_cache(const char *city_name, const char *country,
+                                  GeocodingResponse **response);
 
 /* Try to load results from cache first (read-only). If cache is missing or
  * expired, fetch from API but do NOT save results to cache. Returns 0 on
  * success and fills `response` (caller must free). */
-int geocoding_api_search_readonly_cache(const char*         city_name,
-                                        const char*         country,
-                                        GeocodingResponse** response);
+int geocoding_api_search_readonly_cache(const char *city_name,
+                                        const char *country,
+                                        GeocodingResponse **response);
 
 /**
  * Smart search with 3-tier fallback strategy
@@ -98,7 +98,7 @@ int geocoding_api_search_readonly_cache(const char*         city_name,
  * This function minimizes API calls for autocomplete by checking
  * local databases first.
  */
-int geocoding_api_search_smart(const char* query, GeocodingResponse** response);
+int geocoding_api_search_smart(const char *query, GeocodingResponse **response);
 
 /**
  * Search for a city by name with an additional region filter
@@ -112,9 +112,9 @@ int geocoding_api_search_smart(const char* query, GeocodingResponse** response);
  * Example:
  *   geocoding_api_search_detailed("Lviv", "Lviv Oblast", "UA", &response);
  */
-int geocoding_api_search_detailed(const char* city_name, const char* region,
-                                  const char*         country,
-                                  GeocodingResponse** response);
+int geocoding_api_search_detailed(const char *city_name, const char *region,
+                                  const char *country,
+                                  GeocodingResponse **response);
 
 /**
  * Get the best result (the one with the largest population)
@@ -122,15 +122,15 @@ int geocoding_api_search_detailed(const char* city_name, const char* region,
  * @param response Search response
  * @return Pointer to the best result or NULL
  */
-GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response,
-                                               const char*        country);
+GeocodingResult *geocoding_api_get_best_result(GeocodingResponse *response,
+                                               const char *country);
 
 /**
  * Free the memory for a search response
  *
  * @param response Response to free
  */
-void geocoding_api_free_response(GeocodingResponse* response);
+void geocoding_api_free_response(GeocodingResponse *response);
 
 /**
  * Clear the cache
@@ -154,7 +154,7 @@ void geocoding_api_cleanup(void);
  *
  * Example output: "Kyiv, Kyiv Oblast, Ukraine (50.4501, 30.5234)"
  */
-int geocoding_api_format_result(GeocodingResult* result, char* buffer,
+int geocoding_api_format_result(GeocodingResult *result, char *buffer,
                                 size_t buffer_size);
 
 #endif /* GEOCODING_API_H */
