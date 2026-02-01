@@ -26,20 +26,23 @@ static FileCacheInstance* g_weather_cache = NULL;
 /* ============= Internal Structures ============= */
 
 typedef struct {
-    char*        response_data;
-    size_t       response_size;
-    int          http_status;
-    volatile int completed;
-    volatile int error;
-} HttpFetchContext;
+    Location*          location;
+    WeatherApiCallback callback;
+    void*              user_context;
+    char*              cache_key;
+    char*              url;
+    char*              response_data;
+} AsyncWeatherContext;
 
 /* ============= Internal Functions ============= */
 
-static void  http_fetch_callback(const char* event, const char* response);
-static int   fetch_url_sync(const char* url, char** response_data,
-                            int* http_status);
+static void  http_fetch_async_callback(const char* event, const char* response,
+                                       void* context);
 static int   load_weather_from_json(json_t* root, WeatherData** data);
-static int   fetch_weather_from_api(Location* location, WeatherData** data);
+static int   fetch_weather_from_api_async(Location* location,
+                                          WeatherApiCallback callback,
+                                          void* user_context,
+                                          const char* cache_key);
 static char* build_api_url(float lat, float lon);
 static int   parse_weather_json(const char* json_str, WeatherData* data,
                                 float lat, float lon);
@@ -120,58 +123,76 @@ const char* open_meteo_api_get_wind_direction(int degrees) {
 
 /* ============= HTTP Client Integration ============= */
 
-static HttpFetchContext* g_fetch_context = NULL;
-
-static void http_fetch_callback(const char* event, const char* response) {
-    if (!g_fetch_context) {
+static void http_fetch_async_callback(const char* event, const char* response,
+                                      void* context) {
+    AsyncWeatherContext* ctx = (AsyncWeatherContext*)context;
+    
+    if (!ctx) {
         return;
     }
 
+    WeatherData* data = NULL;
+    int status = -1;
+
     if (strcmp(event, "RESPONSE") == 0) {
-        g_fetch_context->response_data = strdup(response);
-        g_fetch_context->response_size = strlen(response);
-        g_fetch_context->http_status   = 200;
-        g_fetch_context->completed     = 1;
-    } else if (strcmp(event, "ERROR") == 0 || strcmp(event, "TIMEOUT") == 0) {
-        g_fetch_context->error     = 1;
-        g_fetch_context->completed = 1;
-    }
-}
-
-static int fetch_url_sync(const char* url, char** response_data,
-                          int* http_status) {
-    HttpFetchContext context = {0};
-    g_fetch_context          = &context;
-
-    http_client_get(url, 30000, http_fetch_callback, NULL);
-
-    // Poll event loop - fast iterations, no sleep!
-    time_t start_time      = time(NULL);
-    time_t timeout_seconds = 30;
-
-    while (!context.completed) {
-        smw_work(0); // Pass 0 if monotonic time unavailable
-
-        // Check timeout (1 second granularity)
-        if (time(NULL) - start_time > timeout_seconds) {
-            printf("[METEO] Timeout waiting for response\n");
-            break;
+        /* Parse weather data from response */
+        data = (WeatherData*)calloc(1, sizeof(WeatherData));
+        if (data) {
+            int parse_result = parse_weather_json(response, data,
+                                                 ctx->location->latitude,
+                                                 ctx->location->longitude);
+            if (parse_result == 0) {
+                status = 0;
+                
+                /* Save to cache if enabled */
+                if (g_config.use_cache && ctx->cache_key) {
+                    json_error_t error;
+                    json_t* json = json_loadb(response, strlen(response), 0, &error);
+                    if (json) {
+                        file_cache_save_json(g_weather_cache, ctx->cache_key, json);
+                        json_decref(json);
+                    }
+                }
+                
+                printf("[METEO] Successfully fetched weather data\n");
+            } else {
+                fprintf(stderr, "[METEO] Failed to parse weather data\n");
+                free(data);
+                data = NULL;
+                status = -4;
+            }
+        } else {
+            fprintf(stderr, "[METEO] Failed to allocate weather data\n");
+            status = -3;
         }
+    } else if (strcmp(event, "ERROR") == 0) {
+        fprintf(stderr, "[METEO] HTTP request failed: %s\n", 
+                response ? response : "unknown error");
+        status = -2;
+    } else if (strcmp(event, "TIMEOUT") == 0) {
+        fprintf(stderr, "[METEO] HTTP request timed out\n");
+        status = -2;
     }
 
-    g_fetch_context = NULL;
+    /* Invoke user callback */
+    if (ctx->callback) {
+        ctx->callback(status, data, ctx->user_context);
+    }
 
-    if (context.error || !context.completed) {
-        if (context.response_data) {
-            free(context.response_data);
+    /* Cleanup context */
+    if (ctx->location) {
+        if (ctx->location->name) {
+            free((void*)ctx->location->name);
         }
-        return -1;
+        free(ctx->location);
     }
-
-    *response_data = context.response_data;
-    *http_status   = context.http_status;
-
-    return 0;
+    if (ctx->cache_key) {
+        free(ctx->cache_key);
+    }
+    if (ctx->url) {
+        free(ctx->url);
+    }
+    free(ctx);
 }
 
 /* ============= Public API Implementation ============= */
@@ -201,11 +222,64 @@ int open_meteo_api_init(WeatherConfig* config) {
     return 0;
 }
 
+int open_meteo_api_get_current_async(Location* location,
+                                     WeatherApiCallback callback,
+                                     void* user_context) {
+    if (!location || !callback) {
+        fprintf(stderr, "[METEO] Invalid parameters\n");
+        return -1;
+    }
+
+    /* Generate cache key from coordinates */
+    char key_input[256];
+    snprintf(key_input, sizeof(key_input), "weather_%.6f_%.6f",
+             location->latitude, location->longitude);
+
+    char cache_key[FILE_CACHE_KEY_LENGTH];
+    if (file_cache_generate_key(g_weather_cache, key_input, cache_key,
+                                sizeof(cache_key)) != FILE_CACHE_OK) {
+        fprintf(stderr, "[METEO] Failed to generate cache key\n");
+        return -2;
+    }
+
+    /* Check cache */
+    if (g_config.use_cache && file_cache_is_valid(g_weather_cache, cache_key)) {
+        printf("[METEO] Cache HIT\n");
+
+        json_t* cached_json = NULL;
+        if (file_cache_load_json(g_weather_cache, cache_key,
+                                 (void**)&cached_json) == FILE_CACHE_OK) {
+            WeatherData* data = NULL;
+            int result = load_weather_from_json(cached_json, &data);
+            json_decref(cached_json);
+
+            if (result == 0) {
+                /* Invoke callback immediately with cached data */
+                callback(0, data, user_context);
+                return 0;
+            }
+        }
+
+        fprintf(stderr, "[METEO] Cache load failed\n");
+    } else {
+        printf("[METEO] Cache MISS\n");
+    }
+
+    /* Fetch from API asynchronously */
+    return fetch_weather_from_api_async(location, callback, user_context, cache_key);
+}
+
 int open_meteo_api_get_current(Location* location, WeatherData** data) {
     if (!location || !data) {
         fprintf(stderr, "[METEO] Invalid parameters\n");
         return -1;
     }
+
+    fprintf(stderr, "[METEO] Warning: open_meteo_api_get_current() is deprecated. "
+                    "Use open_meteo_api_get_current_async() instead.\n");
+
+    /* This synchronous version is kept for backward compatibility
+     * but should be migrated to the async version */
 
     /* Generate cache key from coordinates */
     char key_input[256];
@@ -239,27 +313,9 @@ int open_meteo_api_get_current(Location* location, WeatherData** data) {
         printf("[METEO] Cache MISS\n");
     }
 
-    int result = fetch_weather_from_api(location, data);
-
-    if (result != 0) {
-        fprintf(stderr, "[METEO] API fetch failed\n");
-        return -3;
-    }
-
-    /* Save to cache */
-    if (g_config.use_cache && (*data)->_raw_json_cache) {
-        json_error_t error;
-        json_t*      json = json_loadb((*data)->_raw_json_cache,
-                                       strlen((*data)->_raw_json_cache), 0, &error);
-        if (json) {
-            file_cache_save_json(g_weather_cache, cache_key, json);
-            json_decref(json);
-        }
-        free((*data)->_raw_json_cache);
-        (*data)->_raw_json_cache = NULL;
-    }
-
-    return 0;
+    fprintf(stderr, "[METEO] ERROR: Synchronous API fetch not supported in async mode.\n");
+    fprintf(stderr, "[METEO] Please migrate to open_meteo_api_get_current_async().\n");
+    return -99;
 }
 
 void open_meteo_api_free_current(WeatherData* data) {
@@ -521,7 +577,10 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
     return 0;
 }
 
-static int fetch_weather_from_api(Location* location, WeatherData** data) {
+static int fetch_weather_from_api_async(Location* location,
+                                        WeatherApiCallback callback,
+                                        void* user_context,
+                                        const char* cache_key) {
     char* url = build_api_url(location->latitude, location->longitude);
     if (!url) {
         return -1;
@@ -529,36 +588,46 @@ static int fetch_weather_from_api(Location* location, WeatherData** data) {
 
     printf("[METEO] Fetching: %s\n", url);
 
-    char* response_data = NULL;
-    int   http_status   = 0;
-
-    int result = fetch_url_sync(url, &response_data, &http_status);
-    free(url);
-
-    if (result != 0 || !response_data) {
+    /* Allocate async context */
+    AsyncWeatherContext* ctx = (AsyncWeatherContext*)calloc(1, sizeof(AsyncWeatherContext));
+    if (!ctx) {
+        free(url);
         return -2;
     }
 
-    /* debug: raw response suppressed */
-
-    *data = (WeatherData*)calloc(1, sizeof(WeatherData));
-    if (!*data) {
-        free(response_data);
+    /* Store location data (we need to copy it) */
+    ctx->location = (Location*)malloc(sizeof(Location));
+    if (!ctx->location) {
+        free(ctx);
+        free(url);
         return -3;
     }
+    
+    ctx->location->latitude = location->latitude;
+    ctx->location->longitude = location->longitude;
+    ctx->location->name = location->name ? strdup(location->name) : NULL;
+    
+    ctx->callback = callback;
+    ctx->user_context = user_context;
+    ctx->cache_key = cache_key ? strdup(cache_key) : NULL;
+    ctx->url = url;
 
-    result = parse_weather_json(response_data, *data, location->latitude,
-                                location->longitude);
-
+    /* Start async HTTP request (30 second timeout) */
+    int result = http_client_get(url, NULL, 30000, http_fetch_async_callback, ctx);
+    
     if (result != 0) {
-        free(response_data);
-        free(*data);
-        *data = NULL;
+        fprintf(stderr, "[METEO] Failed to start HTTP request\n");
+        if (ctx->location->name) {
+            free((void*)ctx->location->name);
+        }
+        free(ctx->location);
+        if (ctx->cache_key) {
+            free(ctx->cache_key);
+        }
+        free(ctx->url);
+        free(ctx);
         return -4;
     }
 
-    (*data)->_raw_json_cache = response_data;
-
-    printf("[METEO] Successfully fetched weather data\n");
     return 0;
 }
