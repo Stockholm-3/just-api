@@ -1,3 +1,4 @@
+#include "cache_utils/cache_cleaner.h"
 #include "smw.h"
 #include "utils.h"
 #include "weather_server.h"
@@ -28,6 +29,18 @@ int main() {
 
     smw_init();
 
+    /* Initialize cache cleaner */
+    CacheCleanerConfig cleaner_cfg = {
+        .entries = {{.cache_dir = "./cache/weather_cache", .ttl_seconds = 900},
+                    {.cache_dir = "./cache/geo_cache", .ttl_seconds = 604800}},
+        .entry_count = 2,
+        .verbose     = true};
+
+    CacheCleaner* cache_cleaner = cache_cleaner_create(&cleaner_cfg);
+    if (!cache_cleaner) {
+        printf("[MAIN] Warning: Failed to initialize cache cleaner\n");
+    }
+
     WeatherServer server;
     weather_server_initiate(&server);
 
@@ -39,6 +52,11 @@ int main() {
 
     printf("[MAIN] Shutdown signal received, cleaning up...\n");
     weather_server_dispose(&server);
+
+    if (cache_cleaner) {
+        cache_cleaner_destroy(cache_cleaner);
+    }
+
     smw_dispose();
     printf("[MAIN] Server stopped gracefully\n");
 
