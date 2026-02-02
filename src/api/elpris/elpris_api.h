@@ -1,104 +1,75 @@
+/**
+ * @file elpris_api.h
+ * @brief Asynchronous HTTP API for fetching Swedish electricity prices.
+ *
+ * This module exposes a single entry point that:
+ *  - Parses HTTP query parameters
+ *  - Resolves the correct price date using Swedish local time rules
+ *  - Fetches electricity prices from the public elprisetjustnu.se API
+ *  - Uses file-based caching for both latest and historical data
+ *  - Sends an HTTP response asynchronously via the provided server connection
+ *
+ * The API is designed to be called from an HTTP server request handler.
+ */
+
 #ifndef ELPRIS_API_H
 #define ELPRIS_API_H
 
-#include <http_client.h>
+#include <http_server_connection.h>
 
 /**
- * @brief Callback type invoked when an Elpris API request completes.
+ * @brief Fetch electricity prices and respond asynchronously over HTTP.
  *
- * This callback is called asynchronously when the HTTP request finishes,
- * fails, or times out.
+ * This function parses the provided query string, determines the correct
+ * price date, and either serves cached data or fetches fresh data from the
+ * upstream electricity price API.
  *
- * @param json_data
- *        Pointer to a null-terminated JSON string returned by the API.
- *        On success, contains valid JSON data.
- *        On error or timeout, this parameter is NULL.
- *        The ownership of this pointer is NOT transferred to the caller;
- *        the data is only valid for the duration of the callback.
+ * ## Query parameters
+ * The following query parameters are supported:
  *
- * @param context
- *        User-defined context pointer passed to the fetch function.
+ * - `price` (required):
+ *   Electricity price area (e.g. `"SE1"`, `"SE2"`, `"SE3"`, `"SE4"`).
  *
- * @return
- *        Currently unused. The return value is ignored by the API.
- */
-typedef int (*ElprisApiOnResponse)(char* json_data, void* context);
-
-/**
- * @brief Fetch electricity prices asynchronously for a given date and price
- * area.
+ * - `date` (optional):
+ *   Date in ISO format `YYYY-MM-DD`.
+ *   If omitted, the function automatically selects the "latest available"
+ *   price date according to Swedish local time:
+ *     - Before 13:00 CET/CEST → today
+ *     - From 13:00 onward     → tomorrow
  *
- * This function initiates an HTTP GET request to the Elpris API for
- * the specified date and price area.
+ * ## Caching behavior
+ * - Latest price data is cached until the next Swedish 13:00 cutoff.
+ * - Historical price data is cached for a long duration (effectively
+ * permanent).
  *
- * The request is performed asynchronously. The provided callback
- * will be invoked when the request completes, fails, or times out.
+ * ## Response behavior
+ * - On success, sends a `200 OK` response with `application/json` content.
+ * - On client errors (invalid query), sends a `400 Bad Request` JSON error.
+ * - On upstream or internal errors, sends a `503 Service Unavailable` JSON
+ * error.
  *
- * @param year
- *        Year (e.g. 2024)
+ * ## Asynchronous semantics
+ * - The HTTP request to the upstream API is performed asynchronously.
+ * - All responses (success or error) are sent from the async callback.
+ * - The caller must not reuse or free the `HTTPServerConnection` until a
+ *   response has been sent.
  *
- * @param month
- *        Month (1–12)
- *
- * @param day
- *        Day of month (1–31)
- *
- * @param price_group
- *        3-character price area code (e.g., "SE1", "SE2", "SE3", "SE4")
- *
- * @param callback
- *        User callback function to receive the response.
- *        Must not be NULL.
- *
- * @param context
- *        Optional user-defined pointer passed through to the callback.
- *
- * @return
- *        0 or positive value on successful request initiation.
- *        -1 on parameter validation or memory allocation failure.
- *
- * @note
- * - The response is provided as raw JSON.
- * - On error, the callback receives NULL.
- * - The function validates date parameters but not price_group format.
- */
-int elpris_api_fetch_async(unsigned int year, unsigned int month,
-                           unsigned int day, char price_group[3],
-                           ElprisApiOnResponse callback, void* context);
-
-/**
- * @brief Fetch electricity prices using a query string format.
- *
- * Parses a query string and initiates an HTTP request to the Elpris API.
- * Query format: "date=YYYY-MM-DD&price=XXX"
- * Example: "date=2024-12-31&price=SE3"
- *
- * The request is performed asynchronously. The provided callback
- * will be invoked when the request completes, fails, or times out.
+ * @param conn
+ *   Active HTTP server connection used to send the response.
+ *   Must not be NULL.
  *
  * @param query
- *        Query string containing date and price parameters.
- *        May optionally start with '?'.
- *        Must not be NULL.
- *
- * @param callback
- *        User callback function to receive the response.
- *        Must not be NULL.
- *
- * @param context
- *        Optional user-defined pointer passed through to the callback.
+ *   Raw query string from the HTTP request.
+ *   May be NULL or empty (treated as invalid).
+ *   Example: `"?price=SE3&date=2024-01-15"`
  *
  * @return
- *        0 or positive value on successful request initiation.
- *        -1 on parameter validation, parsing error, or memory allocation
- * failure.
- *
- * @note
- * - On parsing errors, the callback is invoked immediately with NULL.
- * - Price group must be 2-3 characters (e.g., "SE", "SE1", "SE2").
- * - Date format must be YYYY-MM-DD.
+ *   0 on successful initiation of the request (including cache hits).
+ *  -1 if an immediate error occurs (invalid input, memory allocation failure,
+ *     or inability to start the HTTP request).
+ *   Note: asynchronous failures are reported via HTTP error responses, not
+ *   through this return value.
  */
-int elpris_api_fetch_query_async(const char*         query,
-                                 ElprisApiOnResponse callback, void* context);
+int elpris_api_fetch_and_respond(HTTPServerConnection* conn, const char* query);
 
-#endif // ELPRIS_API_H
+#endif /* ELPRIS_API_H */
