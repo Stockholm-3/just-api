@@ -16,6 +16,10 @@ static void handle_shutdown_signal(int signum) {
 }
 
 int main() {
+    // Enable line buffering for stdout when output goes to pipe
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
+
     signal(SIGPIPE, SIG_IGN);
     signal(SIGTERM, handle_shutdown_signal);
     signal(SIGINT, handle_shutdown_signal);
