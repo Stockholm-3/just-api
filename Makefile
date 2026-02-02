@@ -71,10 +71,13 @@ all: $(BIN) $(WATCHDOG_BIN)
 watchdog: $(WATCHDOG_BIN)
 	@echo "Watchdog build complete. [$(BUILD_TYPE)]"
 
-$(WATCHDOG_BIN): $(WATCHDOG_OBJ)
+# Build watchdog binary
+$(WATCHDOG_BIN): $(WATCHDOG_OBJ) $(OBJ_LIB)
 	@mkdir -p $(dir $@)
-	@$(CC) $(LDFLAGS) $< -o $@
+	@echo "Linking watchdog..."
+	@$(CC) $(LDFLAGS) $^ -o $@ $(LIBS)
 
+# Compile watchdog source
 $(WATCHDOG_OBJ): $(WATCHDOG_SRC)
 	@echo "Compiling watchdog $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
@@ -278,6 +281,15 @@ daemon-status:
 
 .PHONY: daemon-restart
 daemon-restart: stop-daemon start-daemon
+
+# ------------------------------------------------------------
+# Run watchdog in foreground (for debugging)
+# ------------------------------------------------------------
+
+.PHONY: watchdog-foreground
+watchdog-foreground: $(WATCHDOG_BIN) $(BIN)
+	@echo "Running watchdog in foreground..."
+	@$(WATCHDOG_BIN) --server $(BIN) --foreground
 
 # Client standalone build
 .PHONY: run-client
