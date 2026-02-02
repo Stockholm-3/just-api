@@ -14,12 +14,21 @@
 #include "open_meteo_api.h"
 #include "response_builder.h"
 
+#include <cache_utils/file_cache.h>
+#include <http_client.h>
 #include <http_utils.h>
 #include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+/* ============= Hourly Cache ============= */
+
+#define HOURLY_CACHE_DIR "./cache/weather_cache/hourly"
+#define HOURLY_CACHE_TTL 3600 /* 1 hour */
+
+static FileCacheInstance* g_hourly_cache = NULL;
 
 /* ============= Internal Structures ============= */
 
@@ -46,7 +55,24 @@ int open_meteo_handler_init(void) {
                             .cache_ttl = 900, /* 15 minutes */
                             .use_cache = true};
 
-    return open_meteo_api_init(&config);
+    int result = open_meteo_api_init(&config);
+    if (result != 0) {
+        return result;
+    }
+
+    /* Initialize hourly cache */
+    FileCacheConfig hourly_cache_cfg = {.cache_dir   = HOURLY_CACHE_DIR,
+                                        .ttl_seconds = HOURLY_CACHE_TTL,
+                                        .enabled     = true};
+    g_hourly_cache = file_cache_create(&hourly_cache_cfg);
+    if (!g_hourly_cache) {
+        fprintf(stderr, "[METEO] Warning: Failed to initialize hourly cache\n");
+    } else {
+        printf("[METEO] Hourly cache initialized (TTL: %d seconds)\n",
+               HOURLY_CACHE_TTL);
+    }
+
+    return 0;
 }
 
 /**
@@ -167,7 +193,14 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
  *
  * Releases all resources allocated by the underlying Open-Meteo API client.
  */
-void open_meteo_handler_cleanup(void) { open_meteo_api_cleanup(); }
+void open_meteo_handler_cleanup(void) {
+    open_meteo_api_cleanup();
+
+    if (g_hourly_cache) {
+        file_cache_destroy(g_hourly_cache);
+        g_hourly_cache = NULL;
+    }
+}
 
 /* ============= Async Handler Implementation ============= */
 
@@ -334,6 +367,372 @@ int open_meteo_handler_current_async(HTTPServerConnection* conn,
                           error_json, strlen(error_json));
             free(error_json);
         }
+        free(ctx);
+        return -1;
+    }
+
+    return 0;
+}
+
+/* ============= Hourly Handler Implementation ============= */
+
+#define HOURLY_API_BASE_URL "http://api.open-meteo.com/v1/forecast"
+
+typedef struct {
+    HTTPServerConnection* conn;
+    float                 lat;
+    float                 lon;
+    int                   hours;
+    char*                 cache_key;
+} AsyncHourlyContext;
+
+static void hourly_http_callback(const char* event, const char* response,
+                                 void* context);
+
+static char* build_hourly_url(float lat, float lon, int hours) {
+    char* url = malloc(1024);
+    if (!url) return NULL;
+
+    snprintf(url, 1024,
+             "%s?latitude=%.6f&longitude=%.6f"
+             "&hourly=temperature_2m,relative_humidity_2m,precipitation,"
+             "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
+             "is_day&forecast_hours=%d&timezone=GMT",
+             HOURLY_API_BASE_URL, lat, lon, hours);
+    return url;
+}
+
+static int parse_hours_param(const char* query) {
+    int   hours       = 24; /* default */
+    char* hours_param = strstr(query, "hours=");
+    if (hours_param) {
+        hours = atoi(hours_param + 6);
+        if (hours < 1) hours = 1;
+        if (hours > 168) hours = 168;
+    }
+    return hours;
+}
+
+static char* build_hourly_response_json(const char* api_response, float lat,
+                                        float lon) {
+    json_error_t error;
+    json_t*      root = json_loadb(api_response, strlen(api_response), 0, &error);
+    if (!root) return NULL;
+
+    json_t* hourly       = json_object_get(root, "hourly");
+    json_t* hourly_units = json_object_get(root, "hourly_units");
+    if (!hourly) {
+        json_decref(root);
+        return NULL;
+    }
+
+    json_t* times = json_object_get(hourly, "time");
+    size_t  count = json_array_size(times);
+    if (count == 0) {
+        json_decref(root);
+        return NULL;
+    }
+
+    /* Get units */
+    const char* temp_unit =
+        json_string_value(json_object_get(hourly_units, "temperature_2m"));
+    const char* wind_unit =
+        json_string_value(json_object_get(hourly_units, "wind_speed_10m"));
+    if (!temp_unit) temp_unit = "°C";
+    if (!wind_unit) wind_unit = "km/h";
+
+    /* Get arrays */
+    json_t* temps    = json_object_get(hourly, "temperature_2m");
+    json_t* humidity = json_object_get(hourly, "relative_humidity_2m");
+    json_t* precip   = json_object_get(hourly, "precipitation");
+    json_t* codes    = json_object_get(hourly, "weather_code");
+    json_t* pressure = json_object_get(hourly, "surface_pressure");
+    json_t* winds    = json_object_get(hourly, "wind_speed_10m");
+    json_t* winddir  = json_object_get(hourly, "wind_direction_10m");
+    json_t* isday    = json_object_get(hourly, "is_day");
+
+    /* Build response */
+    json_t* data         = json_object();
+    json_t* location_obj = json_object();
+    json_object_set_new(location_obj, "latitude", json_real(lat));
+    json_object_set_new(location_obj, "longitude", json_real(lon));
+    json_object_set_new(data, "location", location_obj);
+
+    json_t* hourly_array = json_array();
+    for (size_t i = 0; i < count; i++) {
+        json_t* point = json_object();
+
+        const char* time_str = json_string_value(json_array_get(times, i));
+        json_object_set_new(point, "time", json_string(time_str ? time_str : ""));
+
+        json_object_set_new(point, "temperature",
+                            json_real(json_real_value(json_array_get(temps, i))));
+        json_object_set_new(point, "temperature_unit", json_string(temp_unit));
+
+        json_object_set_new(
+            point, "humidity",
+            json_real(json_real_value(json_array_get(humidity, i))));
+
+        json_object_set_new(
+            point, "precipitation",
+            json_real(json_real_value(json_array_get(precip, i))));
+
+        int code = json_integer_value(json_array_get(codes, i));
+        json_object_set_new(point, "weather_code", json_integer(code));
+        json_object_set_new(point, "weather_description",
+                            json_string(open_meteo_api_get_description(code)));
+
+        json_object_set_new(point, "windspeed",
+                            json_real(json_real_value(json_array_get(winds, i))));
+        json_object_set_new(point, "windspeed_unit", json_string(wind_unit));
+
+        int dir = json_integer_value(json_array_get(winddir, i));
+        json_object_set_new(point, "wind_direction", json_integer(dir));
+        json_object_set_new(point, "wind_direction_name",
+                            json_string(open_meteo_api_get_wind_direction(dir)));
+
+        json_object_set_new(
+            point, "pressure",
+            json_real(json_real_value(json_array_get(pressure, i))));
+
+        json_object_set_new(
+            point, "is_day",
+            json_integer(json_integer_value(json_array_get(isday, i))));
+
+        json_array_append_new(hourly_array, point);
+    }
+    json_object_set_new(data, "hourly_forecast", hourly_array);
+
+    json_decref(root);
+
+    char* result = response_builder_success(data);
+    return result;
+}
+
+static void hourly_http_callback(const char* event, const char* response,
+                                 void* context) {
+    AsyncHourlyContext* ctx = (AsyncHourlyContext*)context;
+    if (!ctx || !ctx->conn) {
+        if (ctx) {
+            free(ctx->cache_key);
+            free(ctx);
+        }
+        return;
+    }
+
+    if (strcmp(event, "RESPONSE") == 0 && response) {
+        /* Save to cache */
+        if (g_hourly_cache && ctx->cache_key) {
+            json_error_t error;
+            json_t*      json = json_loadb(response, strlen(response), 0, &error);
+            if (json) {
+                file_cache_save_json(g_hourly_cache, ctx->cache_key, json);
+                json_decref(json);
+            }
+        }
+
+        /* Build response */
+        char* json_response =
+            build_hourly_response_json(response, ctx->lat, ctx->lon);
+
+        if (json_response) {
+            send_response(ctx->conn, HTTP_OK, "application/json", json_response,
+                          strlen(json_response));
+            free(json_response);
+        } else {
+            char* error_json = response_builder_error(
+                HTTP_INTERNAL_ERROR,
+                response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+                "Failed to parse hourly weather data");
+            if (error_json) {
+                send_response(ctx->conn, HTTP_INTERNAL_ERROR, "application/json",
+                              error_json, strlen(error_json));
+                free(error_json);
+            }
+        }
+    } else {
+        /* Error or timeout */
+        char* error_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to fetch hourly weather data");
+        if (error_json) {
+            send_response(ctx->conn, HTTP_INTERNAL_ERROR, "application/json",
+                          error_json, strlen(error_json));
+            free(error_json);
+        }
+    }
+
+    free(ctx->cache_key);
+    free(ctx);
+}
+
+int open_meteo_handler_hourly(const char* query_string, char** response_json,
+                              int* status_code) {
+    /* This sync version only works with cache */
+    if (!response_json || !status_code) return -1;
+
+    *response_json = NULL;
+    *status_code   = HTTP_INTERNAL_ERROR;
+
+    float lat, lon;
+    if (open_meteo_api_parse_query(query_string, &lat, &lon) != 0) {
+        *response_json = response_builder_error(
+            HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
+            "Invalid query parameters. Expected: lat=XX&lon=YY");
+        *status_code = HTTP_BAD_REQUEST;
+        return -1;
+    }
+
+    int hours = parse_hours_param(query_string);
+
+    /* Generate cache key */
+    char key_input[256];
+    snprintf(key_input, sizeof(key_input), "hourly_%.6f_%.6f_%d", lat, lon,
+             hours);
+
+    char cache_key[FILE_CACHE_KEY_LENGTH];
+    if (!g_hourly_cache ||
+        file_cache_generate_key(g_hourly_cache, key_input, cache_key,
+                                sizeof(cache_key)) != FILE_CACHE_OK) {
+        *response_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Cache not initialized");
+        *status_code = HTTP_INTERNAL_ERROR;
+        return -1;
+    }
+
+    /* Check cache */
+    if (file_cache_is_valid(g_hourly_cache, cache_key)) {
+        printf("[METEO] Hourly sync cache HIT\n");
+        json_t* cached_json = NULL;
+        if (file_cache_load_json(g_hourly_cache, cache_key,
+                                 (void**)&cached_json) == FILE_CACHE_OK) {
+            char* api_str = json_dumps(cached_json, 0);
+            json_decref(cached_json);
+
+            if (api_str) {
+                *response_json = build_hourly_response_json(api_str, lat, lon);
+                free(api_str);
+
+                if (*response_json) {
+                    *status_code = HTTP_OK;
+                    return 0;
+                }
+            }
+        }
+    }
+
+    /* Cache miss - sync version cannot fetch from API */
+    printf("[METEO] Hourly sync cache MISS\n");
+    *response_json = response_builder_error(
+        HTTP_INTERNAL_ERROR, response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+        "Hourly data not in cache. Please try again.");
+    *status_code = HTTP_INTERNAL_ERROR;
+    return -1;
+}
+
+int open_meteo_handler_hourly_async(HTTPServerConnection* conn,
+                                    const char*           query_string) {
+    if (!conn) return -1;
+
+    float lat, lon;
+    if (open_meteo_api_parse_query(query_string, &lat, &lon) != 0) {
+        char* error_json = response_builder_error(
+            HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
+            "Invalid query parameters. Expected: lat=XX&lon=YY");
+        if (error_json) {
+            send_response(conn, HTTP_BAD_REQUEST, "application/json", error_json,
+                          strlen(error_json));
+            free(error_json);
+        }
+        return -1;
+    }
+
+    int hours = parse_hours_param(query_string);
+
+    /* Generate cache key */
+    char key_input[256];
+    snprintf(key_input, sizeof(key_input), "hourly_%.6f_%.6f_%d", lat, lon,
+             hours);
+
+    char cache_key[FILE_CACHE_KEY_LENGTH];
+    if (g_hourly_cache &&
+        file_cache_generate_key(g_hourly_cache, key_input, cache_key,
+                                sizeof(cache_key)) == FILE_CACHE_OK) {
+        /* Check cache */
+        if (file_cache_is_valid(g_hourly_cache, cache_key)) {
+            printf("[METEO] Hourly cache HIT\n");
+            json_t* cached_json = NULL;
+            if (file_cache_load_json(g_hourly_cache, cache_key,
+                                     (void**)&cached_json) == FILE_CACHE_OK) {
+                char* api_str = json_dumps(cached_json, 0);
+                json_decref(cached_json);
+
+                if (api_str) {
+                    char* response_json =
+                        build_hourly_response_json(api_str, lat, lon);
+                    free(api_str);
+
+                    if (response_json) {
+                        send_response(conn, HTTP_OK, "application/json",
+                                      response_json, strlen(response_json));
+                        free(response_json);
+                        return 0;
+                    }
+                }
+            }
+        }
+    }
+
+    printf("[METEO] Hourly cache MISS - fetching from API\n");
+
+    /* Create async context */
+    AsyncHourlyContext* ctx = malloc(sizeof(AsyncHourlyContext));
+    if (!ctx) {
+        char* error_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Memory allocation failed");
+        if (error_json) {
+            send_response(conn, HTTP_INTERNAL_ERROR, "application/json",
+                          error_json, strlen(error_json));
+            free(error_json);
+        }
+        return -1;
+    }
+
+    ctx->conn      = conn;
+    ctx->lat       = lat;
+    ctx->lon       = lon;
+    ctx->hours     = hours;
+    ctx->cache_key = strdup(cache_key);
+
+    /* Build URL and fetch */
+    char* url = build_hourly_url(lat, lon, hours);
+    if (!url) {
+        free(ctx->cache_key);
+        free(ctx);
+        return -1;
+    }
+
+    printf("[METEO] Fetching hourly: %s\n", url);
+
+    int result = http_client_get(url, NULL, 30000, hourly_http_callback, ctx);
+    free(url);
+
+    if (result != 0) {
+        char* error_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to initiate hourly data fetch");
+        if (error_json) {
+            send_response(conn, HTTP_INTERNAL_ERROR, "application/json",
+                          error_json, strlen(error_json));
+            free(error_json);
+        }
+        free(ctx->cache_key);
         free(ctx);
         return -1;
     }
