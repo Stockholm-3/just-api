@@ -107,7 +107,8 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
  * the async API. The response is sent directly to the connection via callback.
  *
  * @param[in] conn         HTTP server connection to send response to.
- * @param[in] query_string Query parameters string (e.g., "lat=37.7749&lon=-122.4194").
+ * @param[in] query_string Query parameters string (e.g.,
+ * "lat=37.7749&lon=-122.4194").
  *
  * @return 0 on successful initiation, -1 on immediate error.
  *
