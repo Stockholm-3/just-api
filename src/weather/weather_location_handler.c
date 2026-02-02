@@ -16,10 +16,19 @@
 #include "popular_cities.h"
 #include "response_builder.h"
 
+#include <http_utils.h>
 #include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* ============= Internal Structures ============= */
+
+typedef struct {
+    HTTPServerConnection* conn;
+    GeocodingResponse*    geo_response;
+    GeocodingResult*      best_location;
+} AsyncWeatherLocationContext;
 
 /**
  * @brief Global flag indicating whether the module has been initialized.
@@ -545,4 +554,189 @@ static int parse_city_query(const char* query, char* city, size_t city_size,
     }
 
     return found_city ? 0 : -1;
+}
+/* ============= Async Handler Implementation ============= */
+
+static void weather_by_city_callback(int status, WeatherData* data, void* context);
+
+int weather_location_handler_by_city_async(HTTPServerConnection* conn,
+                                           const char*           query_string) {
+    if (!conn) {
+        return -1;
+    }
+
+    if (ensure_initialized() != 0) {
+        char* error_json = response_builder_error(
+            HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to initialize geocoding module");
+        
+        if (error_json) {
+            send_response(conn, HTTP_INTERNAL_ERROR, "application/json",
+                         error_json, strlen(error_json));
+            free(error_json);
+        }
+        return -1;
+    }
+
+    char city[256]    = {0};
+    char country[64]  = {0};
+    char region[256]  = {0};
+
+    if (parse_city_query(query_string, city, sizeof(city), country,
+                        sizeof(country), region, sizeof(region)) != 0) {
+        char* error_json = response_builder_error(
+            HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
+            "Missing required parameter: city");
+        
+        if (error_json) {
+            send_response(conn, HTTP_BAD_REQUEST, "application/json",
+                         error_json, strlen(error_json));
+            free(error_json);
+        }
+        return -1;
+    }
+
+    printf("[WEATHER_LOCATION] Query: city='%s', country='%s', region='%s'\n",
+           city, country, region);
+
+    GeocodingResponse* geo_response = NULL;
+    int result = geocoding_api_search(city, country[0] ? country : NULL, &geo_response);
+
+    if (result != 0 || !geo_response || geo_response->count == 0) {
+        char* error_json = response_builder_error(
+            geo_response && geo_response->count == 0 ? HTTP_NOT_FOUND : HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(geo_response && geo_response->count == 0 ? HTTP_NOT_FOUND : HTTP_INTERNAL_ERROR),
+            geo_response && geo_response->count == 0 ? "City not found" : "Failed to lookup city coordinates");
+        
+        if (error_json) {
+            send_response(conn, geo_response && geo_response->count == 0 ? HTTP_NOT_FOUND : HTTP_INTERNAL_ERROR,
+                         "application/json", error_json, strlen(error_json));
+            free(error_json);
+        }
+        if (geo_response) geocoding_api_free_response(geo_response);
+        return -1;
+    }
+
+    GeocodingResult* best_location = geocoding_api_get_best_result(geo_response, country[0] ? country : NULL);
+    if (!best_location) {
+        char* error_json = response_builder_error(HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+            "Failed to determine best location");
+        if (error_json) {
+            send_response(conn, HTTP_INTERNAL_ERROR, "application/json", error_json, strlen(error_json));
+            free(error_json);
+        }
+        geocoding_api_free_response(geo_response);
+        return -1;
+    }
+
+    printf("[WEATHER_LOCATION] Found: %s, %s (%.4f, %.4f)\n",
+           best_location->name, best_location->country, best_location->latitude,
+           best_location->longitude);
+
+    AsyncWeatherLocationContext* ctx = malloc(sizeof(AsyncWeatherLocationContext));
+    if (!ctx) {
+        char* error_json = response_builder_error(HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR), "Memory allocation failed");
+        if (error_json) {
+            send_response(conn, HTTP_INTERNAL_ERROR, "application/json", error_json, strlen(error_json));
+            free(error_json);
+        }
+        geocoding_api_free_response(geo_response);
+        return -1;
+    }
+
+    ctx->conn          = conn;
+    ctx->geo_response  = geo_response;
+    ctx->best_location = best_location;
+
+    Location location = {.latitude = best_location->latitude, .longitude = best_location->longitude, .name = best_location->name};
+    result = open_meteo_api_get_current_async(&location, weather_by_city_callback, ctx);
+
+    if (result != 0) {
+        char* error_json = response_builder_error(HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR), "Failed to initiate weather data fetch");
+        if (error_json) {
+            send_response(conn, HTTP_INTERNAL_ERROR, "application/json", error_json, strlen(error_json));
+            free(error_json);
+        }
+        geocoding_api_free_response(geo_response);
+        free(ctx);
+        return -1;
+    }
+
+    return 0;
+}
+
+static void weather_by_city_callback(int status, WeatherData* data, void* context) {
+    AsyncWeatherLocationContext* ctx = (AsyncWeatherLocationContext*)context;
+    if (!ctx || !ctx->conn) {
+        if (ctx) {
+            if (ctx->geo_response) geocoding_api_free_response(ctx->geo_response);
+            free(ctx);
+        }
+        return;
+    }
+
+    if (status != 0 || !data) {
+        char* error_json = response_builder_error(HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR), "Failed to fetch weather data");
+        if (error_json) {
+            send_response(ctx->conn, HTTP_INTERNAL_ERROR, "application/json", error_json, strlen(error_json));
+            free(error_json);
+        }
+        if (ctx->geo_response) geocoding_api_free_response(ctx->geo_response);
+        free(ctx);
+        return;
+    }
+
+    json_t* response_data = json_object();
+    json_t* location_obj = json_object();
+    json_object_set_new(location_obj, "name", json_string(ctx->best_location->name));
+    json_object_set_new(location_obj, "country", json_string(ctx->best_location->country));
+    json_object_set_new(location_obj, "country_code", json_string(ctx->best_location->country_code));
+    if (ctx->best_location->admin1[0]) {
+        json_object_set_new(location_obj, "region", json_string(ctx->best_location->admin1));
+    }
+    json_object_set_new(location_obj, "latitude", json_real(ctx->best_location->latitude));
+    json_object_set_new(location_obj, "longitude", json_real(ctx->best_location->longitude));
+    if (ctx->best_location->population > 0) {
+        json_object_set_new(location_obj, "population", json_integer(ctx->best_location->population));
+    }
+    json_object_set_new(response_data, "location", location_obj);
+
+    json_t* weather_obj = json_object();
+    json_object_set_new(weather_obj, "temperature", json_real(data->temperature));
+    json_object_set_new(weather_obj, "temperature_unit", json_string(data->temperature_unit));
+    json_object_set_new(weather_obj, "windspeed", json_real(data->windspeed));
+    json_object_set_new(weather_obj, "windspeed_unit", json_string(data->windspeed_unit));
+    json_object_set_new(weather_obj, "wind_direction_10m", json_integer(data->winddirection));
+    json_object_set_new(weather_obj, "wind_direction_name", json_string(open_meteo_api_get_wind_direction(data->winddirection)));
+    json_object_set_new(weather_obj, "weather_code", json_integer(data->weather_code));
+    json_object_set_new(weather_obj, "weather_description", json_string(open_meteo_api_get_description(data->weather_code)));
+    json_object_set_new(weather_obj, "is_day", json_integer(data->is_day ? 1 : 0));
+    json_object_set_new(weather_obj, "precipitation", json_real(data->precipitation));
+    json_object_set_new(weather_obj, "precipitation_unit", json_string("mm"));
+    json_object_set_new(weather_obj, "humidity", json_real(data->humidity));
+    json_object_set_new(weather_obj, "pressure", json_real(data->pressure));
+    json_object_set_new(response_data, "current_weather", weather_obj);
+
+    char* response_json = response_builder_success(response_data);
+    if (response_json) {
+        send_response(ctx->conn, HTTP_OK, "application/json", response_json, strlen(response_json));
+        free(response_json);
+    } else {
+        json_decref(response_data);
+        char* error_json = response_builder_error(HTTP_INTERNAL_ERROR,
+            response_builder_get_error_type(HTTP_INTERNAL_ERROR), "Failed to build response");
+        if (error_json) {
+            send_response(ctx->conn, HTTP_INTERNAL_ERROR, "application/json", error_json, strlen(error_json));
+            free(error_json);
+        }
+    }
+
+    open_meteo_api_free_current(data);
+    if (ctx->geo_response) geocoding_api_free_response(ctx->geo_response);
+    free(ctx);
 }

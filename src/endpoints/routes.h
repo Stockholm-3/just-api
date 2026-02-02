@@ -1,6 +1,7 @@
 #include "endpoints/citites.h"
 #include "endpoints/current.h"
 #include "endpoints/echo.h"
+#include "endpoints/elpris.h"
 #include "endpoints/forecast.h"
 #include "endpoints/home.h"
 #include "endpoints/weather.h"
