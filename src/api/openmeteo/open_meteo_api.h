@@ -44,10 +44,19 @@ typedef struct {
     bool        use_cache;
 } WeatherConfig;
 
+/* Callback type for async weather data retrieval */
+typedef void (*WeatherApiCallback)(int status, WeatherData* data,
+                                   void* context);
+
 /* Initialize weather API */
 int open_meteo_api_init(WeatherConfig* config);
 
-/* Get current weather for location */
+/* Get current weather for location (async with callback) */
+int open_meteo_api_get_current_async(Location*          location,
+                                     WeatherApiCallback callback,
+                                     void*              context);
+
+/* Get current weather for location (legacy synchronous - deprecated) */
 int open_meteo_api_get_current(Location* location, WeatherData** data);
 
 /* Free weather data */
@@ -65,4 +74,4 @@ const char* open_meteo_api_get_wind_direction(int degrees);
 /* Parse query parameters: lat=X&long=Y or lat=X&lon=Y */
 int open_meteo_api_parse_query(const char* query, float* lat, float* lon);
 
-#endif /* open_meteo_api_H */
+#endif /* OPEN_METEO_API_H */

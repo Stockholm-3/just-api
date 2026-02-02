@@ -18,6 +18,8 @@
 #ifndef OPEN_METEO_HANDLER_H
 #define OPEN_METEO_HANDLER_H
 
+#include "http_server_connection.h"
+
 /**
  * @brief Initialize the Open-Meteo handler module.
  *
@@ -97,6 +99,23 @@ int open_meteo_handler_init(void);
  */
 int open_meteo_handler_current(const char* query_string, char** response_json,
                                int* status_code);
+
+/**
+ * @brief Handle GET /v1/current endpoint request (async version).
+ *
+ * Processes a request for current weather data at specified coordinates using
+ * the async API. The response is sent directly to the connection via callback.
+ *
+ * @param[in] conn         HTTP server connection to send response to.
+ * @param[in] query_string Query parameters string (e.g.,
+ * "lat=37.7749&lon=-122.4194").
+ *
+ * @return 0 on successful initiation, -1 on immediate error.
+ *
+ * @note This is the preferred async version. Responses are sent via callback.
+ */
+int open_meteo_handler_current_async(HTTPServerConnection* conn,
+                                     const char*           query_string);
 
 /**
  * @brief Clean up the Open-Meteo handler module.

@@ -26,6 +26,8 @@
 #ifndef WEATHER_LOCATION_HANDLER_H
 #define WEATHER_LOCATION_HANDLER_H
 
+#include "http_server_connection.h"
+
 /**
  * @brief Initialize the weather location handler.
  *
@@ -101,6 +103,19 @@ int weather_location_handler_init(void);
  */
 int weather_location_handler_by_city(const char* query_string,
                                      char** response_json, int* status_code);
+
+/**
+ * @brief Handle weather request by city name (async version).
+ *
+ * Async version that sends the response directly via the connection.
+ *
+ * @param[in] conn         HTTP server connection to send response to.
+ * @param[in] query_string URL query parameters.
+ *
+ * @return 0 on successful initiation, -1 on immediate error.
+ */
+int weather_location_handler_by_city_async(HTTPServerConnection* conn,
+                                           const char*           query_string);
 
 /**
  * @brief Handle city search request for autocomplete.
