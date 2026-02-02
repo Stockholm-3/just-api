@@ -21,15 +21,15 @@
  * @param http_executor Function pointer to execute HTTP requests
  * @return Number of active (non-completed) requests
  */
-int weather_client_smw_work_impl(WeatherRequest *requests, int request_count,
+int weather_client_smw_work_impl(WeatherRequest* requests, int request_count,
                                  uint64_t current_time,
-                                 char *(*http_executor)(const char *, int *));
+                                 char* (*http_executor)(const char*, int*));
 
 /**
  * @brief Get human-readable state name
  * @param state Request state
  * @return State name string
  */
-const char *weather_client_get_state_name(RequestState state);
+const char* weather_client_get_state_name(RequestState state);
 
 #endif // WEATHER_CLIENT_SMW_H

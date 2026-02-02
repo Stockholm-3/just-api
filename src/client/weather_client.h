@@ -17,34 +17,34 @@
  * @param status_code HTTP status code
  * @param user_data User-provided context data
  */
-typedef void (*WeatherCallback)(char *response, int status_code,
-                                void *user_data);
+typedef void (*WeatherCallback)(char* response, int status_code,
+                                void* user_data);
 
 /**
  * @brief Request state for state machine worker
  */
 typedef enum {
-  REQ_STATE_IDLE = 0,
-  REQ_STATE_QUEUED,
-  REQ_STATE_CONNECTING,
-  REQ_STATE_SENDING,
-  REQ_STATE_RECEIVING,
-  REQ_STATE_PROCESSING,
-  REQ_STATE_COMPLETED,
-  REQ_STATE_ERROR
+    REQ_STATE_IDLE = 0,
+    REQ_STATE_QUEUED,
+    REQ_STATE_CONNECTING,
+    REQ_STATE_SENDING,
+    REQ_STATE_RECEIVING,
+    REQ_STATE_PROCESSING,
+    REQ_STATE_COMPLETED,
+    REQ_STATE_ERROR
 } RequestState;
 
 /**
  * @brief Async weather request context
  */
 typedef struct {
-  char *base_url;
-  char *endpoint;
-  char *query;
-  WeatherCallback callback;
-  void *user_data;
-  RequestState state;
-  uint64_t start_time;
+    char*           base_url;
+    char*           endpoint;
+    char*           query;
+    WeatherCallback callback;
+    void*           user_data;
+    RequestState    state;
+    uint64_t        start_time;
 } WeatherRequest;
 
 /**
@@ -52,7 +52,7 @@ typedef struct {
  * @param base_url Base API URL (e.g., "http://localhost:10680/v1")
  * @return 0 on success, -1 on error
  */
-int weather_client_init(const char *base_url);
+int weather_client_init(const char* base_url);
 
 /**
  * @brief Fetch current weather asynchronously
@@ -62,8 +62,8 @@ int weather_client_init(const char *base_url);
  * @param user_data User context
  * @return 0 on success, -1 on error
  */
-int weather_client_current_async(const char *city, const char *country_code,
-                                 WeatherCallback callback, void *user_data);
+int weather_client_current_async(const char* city, const char* country_code,
+                                 WeatherCallback callback, void* user_data);
 
 /**
  * @brief Fetch weather forecast asynchronously
@@ -74,9 +74,9 @@ int weather_client_current_async(const char *city, const char *country_code,
  * @param user_data User context
  * @return 0 on success, -1 on error
  */
-int weather_client_forecast_async(const char *city, const char *country_code,
+int weather_client_forecast_async(const char* city, const char* country_code,
                                   int days, WeatherCallback callback,
-                                  void *user_data);
+                                  void* user_data);
 
 /**
  * @brief Process pending async requests
@@ -96,7 +96,7 @@ int weather_client_smw_work(uint64_t current_time);
  * @param state Request state
  * @return Human-readable state name
  */
-const char *weather_client_get_state_name(RequestState state);
+const char* weather_client_get_state_name(RequestState state);
 
 /**
  * @brief Cleanup and shutdown client

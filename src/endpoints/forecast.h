@@ -24,7 +24,7 @@ static inline int handle_forecast_weather(HTTPServerConnection* conn,
     int   status_code   = 0;
 
     // TODO: Implement actual forecast handler
-    // For now, use current weather handler as placeholder
+    // For now, delegate to Open-Meteo current weather handler as a placeholder
     open_meteo_handler_current(query, &json_response, &status_code);
 
     if (!json_response) {
