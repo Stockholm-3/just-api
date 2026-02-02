@@ -28,6 +28,7 @@ Route g_routes[] = {
     {"GET", "/v1/current", handle_current_weather},
     {"GET", "/v1/forecast", handle_forecast_weather},
     {"GET", "/v1/cities", handle_city_search},
+    {"GET", "/v1/elpris", handle_elpris_route},
 };
 
 #define ROUTE_COUNT (sizeof(g_routes) / sizeof(g_routes[0]))

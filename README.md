@@ -1,30 +1,21 @@
-![Just Weather logo](https://i.imgur.com/m6CMJxz.png)
-
-A lightweight C weather server providing a simple HTTP REST API
+C server providing an energy plan for housholds with solar panels and battery
 
 >Just Weather is a **HTTP server** built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
 >It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
 
 ![C](https://img.shields.io/badge/C-%2300599C.svg?style=flat&logo=c&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Build](https://github.com/Stockholm-3/just-weather/actions/workflows/build.yml/badge.svg)](https://github.com/Stockholm-3/just-weather/actions/workflows/build.yml)
-[![Check Formatting](https://github.com/Stockholm-3/just-weather/actions/workflows/format-check.yml/badge.svg)](https://github.com/Stockholm-3/just-weather/actions/workflows/format-check.yml)
 ---
+
+## Related repos
+[stockholm-3-lib](https://github.com/Stockholm-3/lib) - Library used for all Stockholm-3 projects. Includes external libraries like Jansson for compiling from source.
 
 ## Features
 
+- **24 hour enegy plan** - to optimise energy usage
 - **Live weather data** — temperature, weather conditions, and wind speed
-- **Open-Meteo integration** — no API key required
-- **C99-compatible** — portable and minimal dependencies
 
 ---
-
-## Requirements
-
-- Linux / WSL environment
-- GCC (C99 compliant)
-- **jansson** (included as submodule or symlink)
-- `make`
 
 ## Installation
 
