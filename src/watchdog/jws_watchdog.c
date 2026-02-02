@@ -7,11 +7,15 @@
 
 #define _GNU_SOURCE
 
+#include "pthread.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <limits.h>
+#include <scheduler.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -231,6 +235,30 @@ static void parse_args(int argc, char* argv[], WatchdogConfig* config) {
     }
 }
 
+void hourly_fetch_callback(void) { printf("One hour has passed\r\n"); }
+
+// thread function that runs the scheduler
+void* scheduler_thread_fn(void* arg) {
+    SchedulerTimer* hourly_timer =
+        create_interval_timer((uint64_t)(1000), hourly_fetch_callback);
+
+    SchedulerTimer* timers[] = {hourly_timer};
+
+    // Run the scheduler loop (blocks until shutdown_flag is set)
+    run_scheduler(timers, 1, &g_shutdown_requested);
+
+    destroy_timer(hourly_timer);
+    return NULL;
+}
+
+// start scheduler thread
+static int start_scheduler_thread(pthread_t* thread_id) {
+    if (pthread_create(thread_id, NULL, scheduler_thread_fn, NULL) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char* argv[]) {
     WatchdogConfig config = {
         .server_path = DEFAULT_SERVER_PATH,
@@ -274,6 +302,15 @@ int main(int argc, char* argv[]) {
     g_state.last_restart_window_start = time(NULL);
     g_state.current_backoff_ms        = INITIAL_BACKOFF_MS;
 
+    pthread_t scheduler_thread;
+    if (start_scheduler_thread(&scheduler_thread) != 0) {
+        fprintf(
+            stderr,
+            "Critical: scheduler thread could not be started. Exiting.\r\n");
+        remove_pid_file(config.pid_file);
+        return 1;
+    }
+
     while (!g_shutdown_requested) {
         if (g_state.server_pid <= 0) {
             g_state.server_pid = spawn_server(config.server_path);
@@ -301,6 +338,9 @@ int main(int argc, char* argv[]) {
         kill(g_state.server_pid, SIGTERM);
         waitpid(g_state.server_pid, &status, 0);
     }
+
+    g_shutdown_requested = 1;
+    pthread_join(scheduler_thread, NULL);
 
     remove_pid_file(config.pid_file);
 
