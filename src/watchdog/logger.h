@@ -20,9 +20,13 @@ void logger_shutdown(void);
 void logger_log(LogLevel level, const char* module, const char* fmt, ...);
 
 // Зручні макроси
-#define LOG_DEBUG(module, fmt, ...) logger_log(LOG_DEBUG, module, fmt, ##__VA_ARGS__)
-#define LOG_INFO(module, fmt, ...)  logger_log(LOG_INFO,  module, fmt, ##__VA_ARGS__)
-#define LOG_WARN(module, fmt, ...)  logger_log(LOG_WARN,  module, fmt, ##__VA_ARGS__)
-#define LOG_ERROR(module, fmt, ...) logger_log(LOG_ERROR, module, fmt, ##__VA_ARGS__)
+#define LOG_DEBUG(module, fmt, ...)                                            \
+    logger_log(LOG_DEBUG, module, fmt, ##__VA_ARGS__)
+#define LOG_INFO(module, fmt, ...)                                             \
+    logger_log(LOG_INFO, module, fmt, ##__VA_ARGS__)
+#define LOG_WARN(module, fmt, ...)                                             \
+    logger_log(LOG_WARN, module, fmt, ##__VA_ARGS__)
+#define LOG_ERROR(module, fmt, ...)                                            \
+    logger_log(LOG_ERROR, module, fmt, ##__VA_ARGS__)
 
 #endif

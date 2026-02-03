@@ -24,13 +24,13 @@
 #include <unistd.h>
 
 #define DEFAULT_SERVER_PATH "./just-server"
-#define DEFAULT_PID_FILE    "/tmp/watchdog.pid"
-#define DEFAULT_LOG_DIR     "./logs"
+#define DEFAULT_PID_FILE "/tmp/watchdog.pid"
+#define DEFAULT_LOG_DIR "./logs"
 
-#define MAX_RESTARTS       10
+#define MAX_RESTARTS 10
 #define RESTART_WINDOW_SEC 60
 #define INITIAL_BACKOFF_MS 1000
-#define MAX_BACKOFF_MS     30000
+#define MAX_BACKOFF_MS 30000
 
 typedef struct {
     const char* server_path;
@@ -203,7 +203,8 @@ static pid_t spawn_server(const char* server_path) {
     pid_t pid = fork();
 
     if (pid < 0) {
-        LOG_ERROR("RESTART", "Failed to fork server process: %s", strerror(errno));
+        LOG_ERROR("RESTART", "Failed to fork server process: %s",
+                  strerror(errno));
         close(stdout_pipe[0]);
         close(stdout_pipe[1]);
         close(stderr_pipe[0]);
@@ -290,7 +291,8 @@ static int should_restart(void) {
 
 static void apply_backoff(void) {
     LOG_INFO("RESTART", "Applying backoff: %d ms (attempt %d/%d)",
-             g_state.current_backoff_ms, g_state.restart_count + 1, MAX_RESTARTS);
+             g_state.current_backoff_ms, g_state.restart_count + 1,
+             MAX_RESTARTS);
 
     usleep((useconds_t)g_state.current_backoff_ms * 1000);
 
@@ -365,11 +367,13 @@ int main(int argc, char* argv[]) {
         // Directory might not exist yet, try to create it
         if (mkdir(config.log_dir, 0755) == 0) {
             if (realpath(config.log_dir, abs_log_dir) == NULL) {
-                fprintf(stderr, "Cannot resolve log directory: %s\n", config.log_dir);
+                fprintf(stderr, "Cannot resolve log directory: %s\n",
+                        config.log_dir);
                 return 1;
             }
         } else {
-            fprintf(stderr, "Cannot create log directory: %s\n", config.log_dir);
+            fprintf(stderr, "Cannot create log directory: %s\n",
+                    config.log_dir);
             return 1;
         }
     }
@@ -457,7 +461,8 @@ int main(int argc, char* argv[]) {
     }
 
     if (g_state.server_pid > 0) {
-        LOG_INFO("WATCHDOG", "Shutting down server (PID %d)...", g_state.server_pid);
+        LOG_INFO("WATCHDOG", "Shutting down server (PID %d)...",
+                 g_state.server_pid);
         int status;
         kill(g_state.server_pid, SIGTERM);
         waitpid(g_state.server_pid, &status, 0);

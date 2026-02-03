@@ -8,10 +8,10 @@
 #include <sys/time.h>
 #include <time.h>
 
-#define MAX_MODULES  16
-#define MAX_MESSAGE  2048
+#define MAX_MODULES 16
+#define MAX_MESSAGE 2048
 #define MAX_LOG_LINE 4096
-#define MAX_PATH     512
+#define MAX_PATH 512
 
 typedef struct {
     FILE*    all_file;
@@ -25,7 +25,7 @@ typedef struct {
 
 static Logger g_logger = {0};
 
-static const char* level_names[] = {"DEBUG", "INFO", "WARN", "ERROR"};
+static const char* g_level_names[] = {"DEBUG", "INFO", "WARN", "ERROR"};
 
 static void get_timestamp(char* buf, size_t buf_size) {
     struct timeval tv;
@@ -74,7 +74,8 @@ static FILE* get_module_file(const char* module) {
     }
     module_lower[len] = '\0';
 
-    int ret = snprintf(filepath, sizeof(filepath), "%s/%s.log", g_logger.log_dir, module_lower);
+    int ret = snprintf(filepath, sizeof(filepath), "%s/%s.log",
+                       g_logger.log_dir, module_lower);
     if (ret < 0 || (size_t)ret >= sizeof(filepath)) {
         return NULL;
     }
@@ -160,8 +161,9 @@ void logger_log(LogLevel level, const char* module, const char* fmt, ...) {
     vsnprintf(message, sizeof(message), fmt, args);
     va_end(args);
 
-    int written = snprintf(full_line, sizeof(full_line), "[%s] [%-5s] [%s] %s\n",
-                           timestamp, level_names[level], module, message);
+    int written =
+        snprintf(full_line, sizeof(full_line), "[%s] [%-5s] [%s] %s\n",
+                 timestamp, g_level_names[level], module, message);
     if (written < 0 || (size_t)written >= sizeof(full_line)) {
         full_line[sizeof(full_line) - 2] = '\n';
         full_line[sizeof(full_line) - 1] = '\0';
