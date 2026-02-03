@@ -40,12 +40,13 @@ Route g_routes[] = {
 
 int handle_not_found(HTTPServerConnection* conn, const char* path) {
     char msg[512];
-    snprintf(msg, sizeof(msg),
-             "The requested endpoint '%s' was not found. Available endpoints: "
-             "GET /, POST /echo, GET /v1/health, GET /v1/current?lat=XX&lon=YY, "
-             "GET /v1/hourly?lat=XX&lon=YY&hours=24, GET "
-             "/v1/hourly?city=NAME&country=CODE&hours=24, "
-             "GET /v1/weather?city=NAME&country=CODE, GET /v1/cities?query=SEARCH",
-             path);
+    snprintf(
+        msg, sizeof(msg),
+        "The requested endpoint '%s' was not found. Available endpoints: "
+        "GET /, POST /echo, GET /v1/health, GET /v1/current?lat=XX&lon=YY, "
+        "GET /v1/hourly?lat=XX&lon=YY&hours=24, GET "
+        "/v1/hourly?city=NAME&country=CODE&hours=24, "
+        "GET /v1/weather?city=NAME&country=CODE, GET /v1/cities?query=SEARCH",
+        path);
     return send_json_error(conn, 404, msg);
 }

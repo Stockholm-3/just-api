@@ -64,7 +64,7 @@ int open_meteo_handler_init(void) {
     FileCacheConfig hourly_cache_cfg = {.cache_dir   = HOURLY_CACHE_DIR,
                                         .ttl_seconds = HOURLY_CACHE_TTL,
                                         .enabled     = true};
-    g_hourly_cache = file_cache_create(&hourly_cache_cfg);
+    g_hourly_cache                   = file_cache_create(&hourly_cache_cfg);
     if (!g_hourly_cache) {
         fprintf(stderr, "[METEO] Warning: Failed to initialize hourly cache\n");
     } else {
@@ -391,7 +391,8 @@ static void hourly_http_callback(const char* event, const char* response,
 
 static char* build_hourly_url(float lat, float lon, int hours) {
     char* url = malloc(1024);
-    if (!url) return NULL;
+    if (!url)
+        return NULL;
 
     snprintf(url, 1024,
              "%s?latitude=%.6f&longitude=%.6f"
@@ -407,8 +408,10 @@ static int parse_hours_param(const char* query) {
     char* hours_param = strstr(query, "hours=");
     if (hours_param) {
         hours = atoi(hours_param + 6);
-        if (hours < 1) hours = 1;
-        if (hours > 168) hours = 168;
+        if (hours < 1)
+            hours = 1;
+        if (hours > 168)
+            hours = 168;
     }
     return hours;
 }
@@ -416,8 +419,9 @@ static int parse_hours_param(const char* query) {
 static char* build_hourly_response_json(const char* api_response, float lat,
                                         float lon) {
     json_error_t error;
-    json_t*      root = json_loadb(api_response, strlen(api_response), 0, &error);
-    if (!root) return NULL;
+    json_t* root = json_loadb(api_response, strlen(api_response), 0, &error);
+    if (!root)
+        return NULL;
 
     json_t* hourly       = json_object_get(root, "hourly");
     json_t* hourly_units = json_object_get(root, "hourly_units");
@@ -438,8 +442,10 @@ static char* build_hourly_response_json(const char* api_response, float lat,
         json_string_value(json_object_get(hourly_units, "temperature_2m"));
     const char* wind_unit =
         json_string_value(json_object_get(hourly_units, "wind_speed_10m"));
-    if (!temp_unit) temp_unit = "°C";
-    if (!wind_unit) wind_unit = "km/h";
+    if (!temp_unit)
+        temp_unit = "°C";
+    if (!wind_unit)
+        wind_unit = "km/h";
 
     /* Get arrays */
     json_t* temps    = json_object_get(hourly, "temperature_2m");
@@ -463,10 +469,12 @@ static char* build_hourly_response_json(const char* api_response, float lat,
         json_t* point = json_object();
 
         const char* time_str = json_string_value(json_array_get(times, i));
-        json_object_set_new(point, "time", json_string(time_str ? time_str : ""));
+        json_object_set_new(point, "time",
+                            json_string(time_str ? time_str : ""));
 
-        json_object_set_new(point, "temperature",
-                            json_real(json_real_value(json_array_get(temps, i))));
+        json_object_set_new(
+            point, "temperature",
+            json_real(json_real_value(json_array_get(temps, i))));
         json_object_set_new(point, "temperature_unit", json_string(temp_unit));
 
         json_object_set_new(
@@ -482,14 +490,16 @@ static char* build_hourly_response_json(const char* api_response, float lat,
         json_object_set_new(point, "weather_description",
                             json_string(open_meteo_api_get_description(code)));
 
-        json_object_set_new(point, "windspeed",
-                            json_real(json_real_value(json_array_get(winds, i))));
+        json_object_set_new(
+            point, "windspeed",
+            json_real(json_real_value(json_array_get(winds, i))));
         json_object_set_new(point, "windspeed_unit", json_string(wind_unit));
 
         int dir = json_integer_value(json_array_get(winddir, i));
         json_object_set_new(point, "wind_direction", json_integer(dir));
-        json_object_set_new(point, "wind_direction_name",
-                            json_string(open_meteo_api_get_wind_direction(dir)));
+        json_object_set_new(
+            point, "wind_direction_name",
+            json_string(open_meteo_api_get_wind_direction(dir)));
 
         json_object_set_new(
             point, "pressure",
@@ -524,7 +534,7 @@ static void hourly_http_callback(const char* event, const char* response,
         /* Save to cache */
         if (g_hourly_cache && ctx->cache_key) {
             json_error_t error;
-            json_t*      json = json_loadb(response, strlen(response), 0, &error);
+            json_t* json = json_loadb(response, strlen(response), 0, &error);
             if (json) {
                 file_cache_save_json(g_hourly_cache, ctx->cache_key, json);
                 json_decref(json);
@@ -545,8 +555,9 @@ static void hourly_http_callback(const char* event, const char* response,
                 response_builder_get_error_type(HTTP_INTERNAL_ERROR),
                 "Failed to parse hourly weather data");
             if (error_json) {
-                send_response(ctx->conn, HTTP_INTERNAL_ERROR, "application/json",
-                              error_json, strlen(error_json));
+                send_response(ctx->conn, HTTP_INTERNAL_ERROR,
+                              "application/json", error_json,
+                              strlen(error_json));
                 free(error_json);
             }
         }
@@ -570,7 +581,8 @@ static void hourly_http_callback(const char* event, const char* response,
 int open_meteo_handler_hourly(const char* query_string, char** response_json,
                               int* status_code) {
     /* This sync version only works with cache */
-    if (!response_json || !status_code) return -1;
+    if (!response_json || !status_code)
+        return -1;
 
     *response_json = NULL;
     *status_code   = HTTP_INTERNAL_ERROR;
@@ -627,7 +639,8 @@ int open_meteo_handler_hourly(const char* query_string, char** response_json,
     /* Cache miss - sync version cannot fetch from API */
     printf("[METEO] Hourly sync cache MISS\n");
     *response_json = response_builder_error(
-        HTTP_INTERNAL_ERROR, response_builder_get_error_type(HTTP_INTERNAL_ERROR),
+        HTTP_INTERNAL_ERROR,
+        response_builder_get_error_type(HTTP_INTERNAL_ERROR),
         "Hourly data not in cache. Please try again.");
     *status_code = HTTP_INTERNAL_ERROR;
     return -1;
@@ -635,7 +648,8 @@ int open_meteo_handler_hourly(const char* query_string, char** response_json,
 
 int open_meteo_handler_hourly_async(HTTPServerConnection* conn,
                                     const char*           query_string) {
-    if (!conn) return -1;
+    if (!conn)
+        return -1;
 
     float lat, lon;
     if (open_meteo_api_parse_query(query_string, &lat, &lon) != 0) {
@@ -643,8 +657,8 @@ int open_meteo_handler_hourly_async(HTTPServerConnection* conn,
             HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
             "Invalid query parameters. Expected: lat=XX&lon=YY");
         if (error_json) {
-            send_response(conn, HTTP_BAD_REQUEST, "application/json", error_json,
-                          strlen(error_json));
+            send_response(conn, HTTP_BAD_REQUEST, "application/json",
+                          error_json, strlen(error_json));
             free(error_json);
         }
         return -1;

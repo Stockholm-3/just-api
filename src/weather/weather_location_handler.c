@@ -801,8 +801,10 @@ static int parse_hours_query(const char* query) {
     char* hours_param = strstr(query, "hours=");
     if (hours_param) {
         hours = atoi(hours_param + 6);
-        if (hours < 1) hours = 1;
-        if (hours > 168) hours = 168;
+        if (hours < 1)
+            hours = 1;
+        if (hours > 168)
+            hours = 168;
     }
     return hours;
 }
