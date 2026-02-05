@@ -235,19 +235,30 @@ static void parse_args(int argc, char* argv[], WatchdogConfig* config) {
     }
 }
 
-void hourly_fetch_callback(void) { printf("One hour has passed\r\n"); }
+void hourly_fetch_callback(void) {
+    printf("One hour has passed\r\n");
+    // TODO:Fetch forecast
+}
+
+void daily_fetch_callback(void) {
+    printf("time is 13:00\r\n");
+    // TODO: Fetch Elpris
+}
 
 // thread function that runs the scheduler
 void* scheduler_thread_fn(void* arg) {
     SchedulerTimer* hourly_timer =
         create_interval_timer((uint64_t)(1000), hourly_fetch_callback);
 
-    SchedulerTimer* timers[] = {hourly_timer};
+    SchedulerTimer* daily_1300 =
+        create_daily_timer(13, 0, 0, daily_fetch_callback);
 
-    // Run the scheduler loop (blocks until shutdown_flag is set)
-    run_scheduler(timers, 1, &g_shutdown_requested);
+    SchedulerTimer* timers[] = {hourly_timer, daily_1300};
+
+    run_scheduler(timers, 2, &g_shutdown_requested);
 
     destroy_timer(hourly_timer);
+    destroy_timer(daily_1300);
     return NULL;
 }
 
