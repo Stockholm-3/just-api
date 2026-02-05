@@ -8,6 +8,8 @@
 #include "scheduler_service.h"
 #define _GNU_SOURCE
 
+#include "pthread.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -282,40 +284,41 @@ int main(int argc, char* argv[]) {
     SchedulerServiceConfig sched_cfg = {.shutdown_flag = &g_shutdown_requested};
 
     if (scheduler_service_start(&scheduler_thread, &sched_cfg) != 0) {
+        perror("pthread");
+    }
 
-        while (!g_shutdown_requested) {
-            if (g_state.server_pid <= 0) {
-                g_state.server_pid = spawn_server(config.server_path);
-            }
+    while (!g_shutdown_requested) {
+        if (g_state.server_pid <= 0) {
+            g_state.server_pid = spawn_server(config.server_path);
+        }
 
-            int status = monitor_server();
+        int status = monitor_server();
 
-            if (status > 0) {
-                g_state.server_pid = -1;
+        if (status > 0) {
+            g_state.server_pid = -1;
 
-                if (!g_shutdown_requested && should_restart()) {
-                    apply_backoff();
-                } else if (!g_shutdown_requested) {
-                    break;
-                }
-            } else if (status < 0) {
+            if (!g_shutdown_requested && should_restart()) {
+                apply_backoff();
+            } else if (!g_shutdown_requested) {
                 break;
             }
-
-            usleep(100000);
+        } else if (status < 0) {
+            break;
         }
 
-        if (g_state.server_pid > 0) {
-            int status;
-            kill(g_state.server_pid, SIGTERM);
-            waitpid(g_state.server_pid, &status, 0);
-        }
-
-        g_shutdown_requested = 1;
-        scheduler_service_stop(scheduler_thread);
-
-        remove_pid_file(config.pid_file);
-
-        return 0;
+        usleep(100000);
     }
+
+    if (g_state.server_pid > 0) {
+        int status;
+        kill(g_state.server_pid, SIGTERM);
+        waitpid(g_state.server_pid, &status, 0);
+    }
+
+    g_shutdown_requested = 1;
+    pthread_join(scheduler_thread, NULL);
+
+    remove_pid_file(config.pid_file);
+
+    return 0;
 }
