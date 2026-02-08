@@ -3,31 +3,31 @@
 
 #include <stdbool.h>
 
-typedef struct{
+typedef struct {
     /* Server Configuration */
     int server_port;
     int max_connections;
     int daemon_mode;
 
     /* Cache Configuration */
-    struct{
+    struct {
         char cache_dir[256];
-        int weather_ttl_seconds;
-        int geo_ttl_seconds;
+        int  weather_ttl_seconds;
+        int  geo_ttl_seconds;
         bool enabled;
     } cache;
 
     /* API Configuration */
-    struct{
-        int max_results;
+    struct {
+        int  max_results;
         char language[8];
     } geocoding;
 
     /* Watchdog Configuration */
-    struct{
+    struct {
         char pid_file[256];
-        int max_restarts;
-        int restart_window_sec;
+        int  max_restarts;
+        int  restart_window_sec;
     } watchdog;
 } ServerConfig;
 
