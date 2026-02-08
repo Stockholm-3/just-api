@@ -1,6 +1,7 @@
 #include "smw.h"
 #include "utils.h"
 #include "weather_server.h"
+#include "config/config_parser.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -14,15 +15,31 @@ static void handle_shutdown_signal(int signum) {
     g_shutdown_requested = 1;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGTERM, handle_shutdown_signal);
     signal(SIGINT, handle_shutdown_signal);
     printf("[MAIN] Signal handlers configured\n");
 
+    /* Load configuration */
+    ServerConfig config;
+    const char*  config_file = "config.json";
+    
+    if (config_parser_load(config_file, &config) != 0) {
+        printf("[MAIN] Using default configuration\n");
+        config_set_defaults(&config);
+    }
+
+    if (config_parser_validate(&config) != 0) {
+        fprintf(stderr, "[MAIN] Invalid configuration\n");
+        return 1;
+    }
+
+    config_parser_print(&config);
+
     struct rlimit rlim;
     getrlimit(RLIMIT_NOFILE, &rlim);
-    rlim.rlim_cur = 65536;
+    rlim.rlim_cur = config.max_connections;
     setrlimit(RLIMIT_NOFILE, &rlim);
     printf("[MAIN] FD limit: %lu\n", rlim.rlim_cur);
 

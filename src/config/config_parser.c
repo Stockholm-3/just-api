@@ -72,3 +72,36 @@ int config_parser_load(const char* filepath, ServerConfig* config) {
     printf("[CONFIG] Configuration loaded from %s\n", filepath);
     return 0;
 }
+
+int config_parser_validate(const ServerConfig* config) {
+    if (!config) {
+        return -1;
+    }
+
+    /* Validate port range */
+    if (config->cache.weather_ttl_seconds < 60) {
+        fprintf(stderr, "[CONFIG] Weather TTL too low: %d\n",
+                config->cache.weather_ttl_seconds);
+        return -1;
+    }
+    return 0;
+}
+
+void config_parser_print(const ServerConfig* config) {
+    printf("\n=== Server Configuration ===\n");
+    printf("Server:\n");
+    printf(" Port: %d\n", config->server_port);
+    printf("  Max Connections: %d\n", config->max_connections);
+    printf("  Daemon Mode: %s\n", config->daemon_mode ? "yes" : "no");
+
+    printf("\nCache:\n");
+    printf("  Directory: %s\n", config->cache.cache_dir);
+    printf("  Weather TTL: %d seconds\n", config->cache.weather_ttl_seconds);
+    printf("  Geo TTL: %d seconds\n", config->cache.geo_ttl_seconds);
+    printf("  Enabled: %s\n", config->cache.enabled ? "yes" : "no");
+
+    printf("\nGeocoding:\n");
+    printf("  Max Results: %d\n", config->geocoding.max_results);
+    printf("  Language: %s\n", config->geocoding.language);
+    printf("===========================\n\n");
+}
