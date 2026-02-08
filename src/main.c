@@ -1,7 +1,7 @@
+#include "config/config_parser.h"
 #include "smw.h"
 #include "utils.h"
 #include "weather_server.h"
-#include "config/config_parser.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     /* Load configuration */
     ServerConfig config;
     const char*  config_file = "config.json";
-    
+
     if (config_parser_load(config_file, &config) != 0) {
         printf("[MAIN] Using default configuration\n");
         config_set_defaults(&config);
