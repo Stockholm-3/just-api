@@ -47,14 +47,14 @@ static int ensure_directory(const char* path) {
 }
 
 static FILE* get_module_file(const char* module) {
-    // Шукаємо існуючий файл модуля
+    // Look for existing module file
     for (int i = 0; i < g_logger.module_count; i++) {
         if (strcmp(g_logger.module_names[i], module) == 0) {
             return g_logger.module_files[i];
         }
     }
 
-    // Створюємо новий файл модуля
+    // Create new module file
     if (g_logger.module_count >= MAX_MODULES) {
         return NULL;
     }
@@ -62,7 +62,7 @@ static FILE* get_module_file(const char* module) {
     char filepath[MAX_PATH];
     char module_lower[32];
 
-    // Конвертуємо в нижній регістр для імені файлу
+    // Convert to lowercase for filename
     size_t len = strlen(module);
     if (len >= sizeof(module_lower)) {
         len = sizeof(module_lower) - 1;
@@ -107,7 +107,7 @@ int logger_init(const char* log_dir, LogLevel min_level) {
     g_logger.log_dir[sizeof(g_logger.log_dir) - 1] = '\0';
     g_logger.min_level                             = min_level;
 
-    // Відкриваємо загальний файл логів
+    // Open the combined log file
     char all_path[MAX_PATH];
     snprintf(all_path, sizeof(all_path), "%s/all.log", log_dir);
 
@@ -169,18 +169,18 @@ void logger_log(LogLevel level, const char* module, const char* fmt, ...) {
         full_line[sizeof(full_line) - 1] = '\0';
     }
 
-    // Вивід у консоль
+    // Output to console
     FILE* console = (level >= LOG_WARN) ? stderr : stdout;
     fputs(full_line, console);
     fflush(console);
 
-    // Запис у загальний файл
+    // Write to combined log file
     if (g_logger.all_file) {
         fputs(full_line, g_logger.all_file);
         fflush(g_logger.all_file);
     }
 
-    // Запис у файл модуля
+    // Write to module-specific file
     FILE* module_file = get_module_file(module);
     if (module_file) {
         fputs(full_line, module_file);

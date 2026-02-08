@@ -56,8 +56,8 @@ OBJ     := $(OBJ_SRC) $(OBJ_LIB)
 # ------------------------------------------------------------
 # Watchdog binary
 # ------------------------------------------------------------
-WATCHDOG_SRC := src/watchdog/watchdog.c src/watchdog/logger.c
-WATCHDOG_OBJ := $(BUILD_DIR)/src/watchdog/watchdog.o $(BUILD_DIR)/src/watchdog/logger.o
+WATCHDOG_SRC := src/watchdog/watchdog.c src/logger/logger.c
+WATCHDOG_OBJ := $(BUILD_DIR)/src/watchdog/watchdog.o $(BUILD_DIR)/src/logger/logger.o
 WATCHDOG_BIN := $(BUILD_DIR)/watchdog
 
 # ------------------------------------------------------------

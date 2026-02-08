@@ -8,18 +8,18 @@ typedef enum {
     LOG_ERROR = 3
 } LogLevel;
 
-// Ініціалізація логера
-// log_dir - директорія для файлів логів (наприклад "/var/log/watchdog")
-// min_level - мінімальний рівень для виводу
+// Initialize logger
+// log_dir - directory for log files (e.g. "/var/log/watchdog")
+// min_level - minimum level for output
 int logger_init(const char* log_dir, LogLevel min_level);
 
-// Завершення роботи логера (закриття файлів)
+// Shutdown logger (close files)
 void logger_shutdown(void);
 
-// Основна функція логування
+// Main logging function
 void logger_log(LogLevel level, const char* module, const char* fmt, ...);
 
-// Зручні макроси
+// Convenience macros
 #define LOG_DEBUG(module, fmt, ...)                                            \
     logger_log(LOG_DEBUG, module, fmt, ##__VA_ARGS__)
 #define LOG_INFO(module, fmt, ...)                                             \

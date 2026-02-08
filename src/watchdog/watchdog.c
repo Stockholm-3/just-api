@@ -7,7 +7,7 @@
 
 #define _GNU_SOURCE
 
-#include "logger.h"
+#include "../logger/logger.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -48,8 +48,7 @@ typedef struct {
 
 static volatile sig_atomic_t g_shutdown_requested = 0;
 static WatchdogState         g_state              = {0};
-static int                   g_server_stdout_fd   = -1;
-static int                   g_server_stderr_fd   = -1;
+static const char*           g_log_dir            = NULL;
 
 static void watchdog_signal_handler(int signum) {
     if (signum == SIGTERM || signum == SIGINT) {
@@ -135,105 +134,20 @@ static void remove_pid_file(const char* path) {
     LOG_DEBUG("DAEMON", "PID file removed: %s", path);
 }
 
-static void close_server_pipes(void) {
-    if (g_server_stdout_fd >= 0) {
-        close(g_server_stdout_fd);
-        g_server_stdout_fd = -1;
-    }
-    if (g_server_stderr_fd >= 0) {
-        close(g_server_stderr_fd);
-        g_server_stderr_fd = -1;
-    }
-}
-
-static void log_lines(const char* buf, LogLevel level) {
-    const char* line_start = buf;
-    const char* p          = buf;
-
-    while (*p) {
-        if (*p == '\n') {
-            size_t len = (size_t)(p - line_start);
-            if (len > 0) {
-                char line[1024];
-                if (len >= sizeof(line)) {
-                    len = sizeof(line) - 1;
-                }
-                memcpy(line, line_start, len);
-                line[len] = '\0';
-                logger_log(level, "SERVER", "%s", line);
-            }
-            line_start = p + 1;
-        }
-        p++;
-    }
-
-    // Логуємо залишок, якщо є
-    if (*line_start != '\0') {
-        logger_log(level, "SERVER", "%s", line_start);
-    }
-}
-
-static void read_server_output(void) {
-    char    buf[4096];
-    ssize_t n;
-
-    // Читаємо stdout
-    while (g_server_stdout_fd >= 0 &&
-           (n = read(g_server_stdout_fd, buf, sizeof(buf) - 1)) > 0) {
-        buf[n] = '\0';
-        log_lines(buf, LOG_INFO);
-    }
-
-    // Читаємо stderr
-    while (g_server_stderr_fd >= 0 &&
-           (n = read(g_server_stderr_fd, buf, sizeof(buf) - 1)) > 0) {
-        buf[n] = '\0';
-        log_lines(buf, LOG_WARN);
-    }
-}
-
 static pid_t spawn_server(const char* server_path) {
-    int stdout_pipe[2], stderr_pipe[2];
-
-    if (pipe(stdout_pipe) < 0 || pipe(stderr_pipe) < 0) {
-        LOG_ERROR("RESTART", "Failed to create pipes: %s", strerror(errno));
-        return -1;
-    }
-
     pid_t pid = fork();
 
     if (pid < 0) {
         LOG_ERROR("RESTART", "Failed to fork server process: %s",
                   strerror(errno));
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[0]);
-        close(stderr_pipe[1]);
         return -1;
     }
 
     if (pid == 0) {
-        // Child: redirect stdout/stderr to pipes
-        dup2(stdout_pipe[1], STDOUT_FILENO);
-        dup2(stderr_pipe[1], STDERR_FILENO);
-        close(stdout_pipe[0]);
-        close(stdout_pipe[1]);
-        close(stderr_pipe[0]);
-        close(stderr_pipe[1]);
-
-        execl(server_path, server_path, NULL);
+        // Child: exec the server with log directory
+        execl(server_path, server_path, "--log-dir", g_log_dir, NULL);
         _exit(127);
     }
-
-    // Parent: setup non-blocking reads
-    close(stdout_pipe[1]);
-    close(stderr_pipe[1]);
-
-    fcntl(stdout_pipe[0], F_SETFL, O_NONBLOCK);
-    fcntl(stderr_pipe[0], F_SETFL, O_NONBLOCK);
-
-    g_server_stdout_fd = stdout_pipe[0];
-    g_server_stderr_fd = stderr_pipe[0];
 
     LOG_INFO("RESTART", "Server spawned with PID %d", pid);
     return pid;
@@ -378,6 +292,7 @@ int main(int argc, char* argv[]) {
         }
     }
     config.log_dir = abs_log_dir;
+    g_log_dir      = abs_log_dir;
 
     // Initialize logger before anything else
     if (logger_init(config.log_dir, LOG_DEBUG) != 0) {
@@ -433,15 +348,9 @@ int main(int argc, char* argv[]) {
             g_state.server_pid = spawn_server(config.server_path);
         }
 
-        // Читаємо вивід сервера
-        read_server_output();
-
         int status = monitor_server();
 
         if (status > 0) {
-            // Читаємо останній вивід перед закриттям
-            read_server_output();
-            close_server_pipes();
             g_state.server_pid = -1;
 
             if (!g_shutdown_requested && should_restart()) {
@@ -451,8 +360,6 @@ int main(int argc, char* argv[]) {
                 break;
             }
         } else if (status < 0) {
-            read_server_output();
-            close_server_pipes();
             LOG_INFO("WATCHDOG", "Server exited cleanly, stopping watchdog");
             break;
         }
@@ -466,8 +373,6 @@ int main(int argc, char* argv[]) {
         int status;
         kill(g_state.server_pid, SIGTERM);
         waitpid(g_state.server_pid, &status, 0);
-        read_server_output();
-        close_server_pipes();
         LOG_INFO("WATCHDOG", "Server stopped");
     }
 
