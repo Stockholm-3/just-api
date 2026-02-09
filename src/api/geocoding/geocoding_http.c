@@ -12,7 +12,7 @@
 
 /* Återanvänd samma API-URL som i geocoding_api.c */
 #ifndef GEOCODING_API_URL
-#define GEOCODING_API_URL "http://geocoding-api.open-meteo.com/v1/search"
+#    define GEOCODING_API_URL "http://geocoding-api.open-meteo.com/v1/search"
 #endif
 
 typedef struct {
@@ -79,8 +79,9 @@ char* geocoding_build_api_url(const char* city_name, const char* country,
     url_encode_char(city_name, strlen(city_name), encoded_city,
                     sizeof(encoded_city));
 
-    int written = snprintf(url, 2048, "%s?name=%s&count=%d&language=%s&format=json",
-                           GEOCODING_API_URL, encoded_city, max_results, language);
+    int written =
+        snprintf(url, 2048, "%s?name=%s&count=%d&language=%s&format=json",
+                 GEOCODING_API_URL, encoded_city, max_results, language);
 
     if (country) {
         /* Koda land om det anges */
