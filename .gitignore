@@ -6,6 +6,7 @@ cache/
 compile_commands.json
 cities/
 documentation/
+logs/
 
 #logs
 *.log

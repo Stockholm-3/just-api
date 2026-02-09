@@ -11,6 +11,7 @@
 #include <geocoding_api.h>
 #include <http_client.h>
 #include <jansson.h>
+#include <logger/logger.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,16 +77,16 @@ int geocoding_api_init(GeocodingConfig* config) {
 
     g_geo_cache = file_cache_create(&cache_cfg);
     if (!g_geo_cache) {
-        fprintf(stderr, "[GEOCODING] Warning: Failed to initialize cache\n");
+        LOG_WARN("GEOCODING", "Failed to initialize cache");
     }
 
-    printf("[GEOCODING] API initialized (http_client mode)\n");
-    printf("[GEOCODING] Cache dir: %s\n", g_config.cache_dir);
-    printf("[GEOCODING] Cache TTL: %d seconds (%d days)\n", g_config.cache_ttl,
-           g_config.cache_ttl / 86400);
-    printf("[GEOCODING] Cache enabled: %s\n",
-           g_config.use_cache ? "yes" : "no");
-    printf("[GEOCODING] Language: %s\n", g_config.language);
+    LOG_INFO("GEOCODING", "API initialized (http_client mode)");
+    LOG_INFO("GEOCODING", "Cache dir: %s", g_config.cache_dir);
+    LOG_INFO("GEOCODING", "Cache TTL: %d seconds (%d days)", g_config.cache_ttl,
+             g_config.cache_ttl / 86400);
+    LOG_INFO("GEOCODING", "Cache enabled: %s",
+             g_config.use_cache ? "yes" : "no");
+    LOG_INFO("GEOCODING", "Language: %s", g_config.language);
 
     return 0;
 }
@@ -93,7 +94,7 @@ int geocoding_api_init(GeocodingConfig* config) {
 int geocoding_api_search(const char* city_name, const char* country,
                          GeocodingResponse** response) {
     if (!city_name || !response) {
-        fprintf(stderr, "[GEOCODING] Invalid parameters\n");
+        LOG_WARN("GEOCODING", "Invalid parameters");
         return -1;
     }
 
@@ -107,16 +108,16 @@ int geocoding_api_search(const char* city_name, const char* country,
     char cache_key[FILE_CACHE_KEY_LENGTH];
     if (file_cache_generate_key(g_geo_cache, normalized, cache_key,
                                 sizeof(cache_key)) != FILE_CACHE_OK) {
-        fprintf(stderr, "[GEOCODING] Failed to generate cache key\n");
+        LOG_ERROR("GEOCODING", "Failed to generate cache key");
         return -2;
     }
 
-    printf("[GEOCODING] Searching for: %s%s%s\n", city_name,
-           country ? " in " : "", country ? country : "");
+    LOG_DEBUG("GEOCODING", "Searching for: %s%s%s", city_name,
+              country ? " in " : "", country ? country : "");
 
     /* Check cache */
     if (g_config.use_cache && file_cache_is_valid(g_geo_cache, cache_key)) {
-        printf("[GEOCODING] Cache HIT - loading from file\n");
+        LOG_DEBUG("GEOCODING", "Cache HIT - loading from file");
 
         json_t* cached_json = NULL;
         if (file_cache_load_json(g_geo_cache, cache_key,
@@ -133,12 +134,12 @@ int geocoding_api_search(const char* city_name, const char* country,
             }
         }
 
-        fprintf(stderr, "[GEOCODING] Cache load failed, fetching from API\n");
+        LOG_WARN("GEOCODING", "Cache load failed, fetching from API");
     } else {
         if (g_config.use_cache) {
-            printf("[GEOCODING] Cache MISS - fetching from API\n");
+            LOG_DEBUG("GEOCODING", "Cache MISS - fetching from API");
         } else {
-            printf("[GEOCODING] Cache disabled - fetching from API\n");
+            LOG_DEBUG("GEOCODING", "Cache disabled - fetching from API");
         }
     }
 
@@ -146,7 +147,7 @@ int geocoding_api_search(const char* city_name, const char* country,
     int result = fetch_from_api(city_name, country, response);
 
     if (result != 0) {
-        fprintf(stderr, "[GEOCODING] API fetch failed\n");
+        LOG_ERROR("GEOCODING", "API fetch failed");
         return -3;
     }
 
@@ -188,9 +189,9 @@ int geocoding_api_search(const char* city_name, const char* country,
 
         if (file_cache_save_json(g_geo_cache, cache_key, root) ==
             FILE_CACHE_OK) {
-            printf("[GEOCODING] Saved to cache\n");
+            LOG_DEBUG("GEOCODING", "Saved to cache");
         } else {
-            fprintf(stderr, "[GEOCODING] Failed to save cache\n");
+            LOG_ERROR("GEOCODING", "Failed to save cache");
         }
         json_decref(root);
     }
@@ -314,13 +315,13 @@ static GeocodingResponse* convert_popular_to_geocoding(PopularCity** cities,
 int geocoding_api_search_smart(const char*         query,
                                GeocodingResponse** response) {
     if (!query || !response) {
-        fprintf(stderr, "[GEOCODING] Invalid parameters\n");
+        LOG_WARN("GEOCODING", "Invalid parameters");
         return -1;
     }
 
     /* Validate minimum query length */
     if (strlen(query) < 2) {
-        fprintf(stderr, "[GEOCODING] Query too short (min 2 characters)\n");
+        LOG_WARN("GEOCODING", "Query too short (min 2 characters)");
         return -1;
     }
 
@@ -333,8 +334,8 @@ int geocoding_api_search_smart(const char*         query,
                                         popular_results, &popular_count, 10);
 
         if (ret == 0 && popular_count > 0) {
-            printf("[GEOCODING] Found %zu results in popular cities DB\n",
-                   popular_count);
+            LOG_DEBUG("GEOCODING", "Found %zu results in popular cities DB",
+                      popular_count);
 
             *response =
                 convert_popular_to_geocoding(popular_results, popular_count);
@@ -348,21 +349,22 @@ int geocoding_api_search_smart(const char*         query,
     /* Tier 2: Search in exact cache match */
     if (geocoding_api_search_readonly_cache(query, NULL, response) == 0) {
         if (response && *response && (*response)->count > 0) {
-            printf("[GEOCODING] Found %d results in cache\n",
-                   (*response)->count);
+            LOG_DEBUG("GEOCODING", "Found %d results in cache",
+                      (*response)->count);
             return 0; /* SUCCESS - found in cache */
         }
     }
 
     /* Tier 3: Fallback to API */
-    printf("[GEOCODING] Cache miss, fetching from API for query: %s\n", query);
+    LOG_DEBUG("GEOCODING", "Cache miss, fetching from API for query: %s",
+              query);
 
     int api_result = fetch_from_api(query, NULL, response);
 
     if (api_result == 0 && *response) {
         /* Save to cache for future requests */
         /* Note: fetch_from_api already handles caching internally */
-        printf("[GEOCODING] API returned %d results\n", (*response)->count);
+        LOG_DEBUG("GEOCODING", "API returned %d results", (*response)->count);
     }
 
     return api_result;
@@ -431,9 +433,9 @@ int geocoding_api_search_detailed(const char* city_name, const char* region,
             /* If nothing is found after filtering, keep the original results */
             free(filtered->results);
             free(filtered);
-            printf("[GEOCODING] No results match region '%s', returning all "
-                   "results\n",
-                   region);
+            LOG_INFO("GEOCODING",
+                     "No results match region '%s', returning all results",
+                     region);
         }
     }
 
@@ -512,11 +514,11 @@ void geocoding_api_free_response(GeocodingResponse* response) {
 
 int geocoding_api_clear_cache(void) {
     if (file_cache_clear(g_geo_cache) == FILE_CACHE_OK) {
-        printf("[GEOCODING] Cache cleared\n");
+        LOG_INFO("GEOCODING", "Cache cleared");
         return 0;
     }
 
-    fprintf(stderr, "[GEOCODING] Failed to clear cache\n");
+    LOG_ERROR("GEOCODING", "Failed to clear cache");
     return -1;
 }
 
@@ -525,7 +527,7 @@ void geocoding_api_cleanup(void) {
         file_cache_destroy(g_geo_cache);
         g_geo_cache = NULL;
     }
-    printf("[GEOCODING] API cleaned up\n");
+    LOG_INFO("GEOCODING", "API cleaned up");
 }
 
 int geocoding_api_format_result(GeocodingResult* result, char* buffer,
@@ -589,11 +591,14 @@ static int fetch_url_sync(const char* url, char** response_data,
     time_t timeout_seconds = 30;
 
     while (!context.completed) {
-        smw_work(0); /* Pass 0 if monotonic time unavailable */
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint64_t now_ms = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        smw_work(now_ms);
 
         /* Check timeout (1 second granularity) */
         if (time(NULL) - start_time > timeout_seconds) {
-            fprintf(stderr, "[GEOCODING] Timeout waiting for response\n");
+            LOG_ERROR("GEOCODING", "Timeout waiting for response");
             break;
         }
     }
@@ -676,7 +681,7 @@ static int parse_geocoding_json(const char*         json_str,
     json_t*      root = json_loadb(json_str, strlen(json_str), 0, &error);
 
     if (!root) {
-        fprintf(stderr, "[GEOCODING] JSON parse error: %s\n", error.text);
+        LOG_ERROR("GEOCODING", "JSON parse error: %s", error.text);
         return -1;
     }
 
@@ -691,7 +696,7 @@ static int parse_geocoding_json(const char*         json_str,
     }
 
     if (!json_is_array(results_array)) {
-        fprintf(stderr, "[GEOCODING] Invalid results format\n");
+        LOG_WARN("GEOCODING", "Invalid results format");
         json_decref(root);
         return -2;
     }
@@ -795,7 +800,7 @@ static int fetch_from_api(const char* city_name, const char* country,
         return -1;
     }
 
-    printf("[GEOCODING] Fetching: %s\n", url);
+    LOG_DEBUG("GEOCODING", "Fetching: %s", url);
 
     char* response_data = NULL;
     int   http_status   = 0;
@@ -816,6 +821,6 @@ static int fetch_from_api(const char* city_name, const char* country,
         return -3;
     }
 
-    printf("[GEOCODING] Found %d result(s)\n", (*response)->count);
+    LOG_DEBUG("GEOCODING", "Found %d result(s)", (*response)->count);
     return 0;
 }

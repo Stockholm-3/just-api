@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <http_client.h>
 #include <jansson.h>
+#include <logger/logger.h>
 #include <open_meteo_api.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -156,23 +157,23 @@ static void http_fetch_async_callback(const char* event, const char* response,
                     }
                 }
 
-                printf("[METEO] Successfully fetched weather data\n");
+                LOG_INFO("METEO", "Successfully fetched weather data");
             } else {
-                fprintf(stderr, "[METEO] Failed to parse weather data\n");
+                LOG_ERROR("METEO", "Failed to parse weather data");
                 free(data);
                 data   = NULL;
                 status = -4;
             }
         } else {
-            fprintf(stderr, "[METEO] Failed to allocate weather data\n");
+            LOG_ERROR("METEO", "Failed to allocate weather data");
             status = -3;
         }
     } else if (strcmp(event, "ERROR") == 0) {
-        fprintf(stderr, "[METEO] HTTP request failed: %s\n",
-                response ? response : "unknown error");
+        LOG_ERROR("METEO", "HTTP request failed: %s",
+                  response ? response : "unknown error");
         status = -2;
     } else if (strcmp(event, "TIMEOUT") == 0) {
-        fprintf(stderr, "[METEO] HTTP request timed out\n");
+        LOG_ERROR("METEO", "HTTP request timed out");
         status = -2;
     }
 
@@ -213,13 +214,13 @@ int open_meteo_api_init(WeatherConfig* config) {
 
     g_weather_cache = file_cache_create(&cache_cfg);
     if (!g_weather_cache) {
-        fprintf(stderr, "[METEO] Warning: Failed to initialize cache\n");
+        LOG_WARN("METEO", "Failed to initialize cache");
     }
 
-    printf("[METEO] API initialized (http_client mode)\n");
-    printf("[METEO] Cache dir: %s\n", g_config.cache_dir);
-    printf("[METEO] Cache TTL: %d seconds\n", g_config.cache_ttl);
-    printf("[METEO] Cache enabled: %s\n", g_config.use_cache ? "yes" : "no");
+    LOG_INFO("METEO", "API initialized (http_client mode)");
+    LOG_INFO("METEO", "Cache dir: %s", g_config.cache_dir);
+    LOG_INFO("METEO", "Cache TTL: %d seconds", g_config.cache_ttl);
+    LOG_INFO("METEO", "Cache enabled: %s", g_config.use_cache ? "yes" : "no");
 
     return 0;
 }
@@ -228,7 +229,7 @@ int open_meteo_api_get_current_async(Location*          location,
                                      WeatherApiCallback callback,
                                      void*              user_context) {
     if (!location || !callback) {
-        fprintf(stderr, "[METEO] Invalid parameters\n");
+        LOG_WARN("METEO", "Invalid parameters");
         return -1;
     }
 
@@ -240,13 +241,13 @@ int open_meteo_api_get_current_async(Location*          location,
     char cache_key[FILE_CACHE_KEY_LENGTH];
     if (file_cache_generate_key(g_weather_cache, key_input, cache_key,
                                 sizeof(cache_key)) != FILE_CACHE_OK) {
-        fprintf(stderr, "[METEO] Failed to generate cache key\n");
+        LOG_ERROR("METEO", "Failed to generate cache key");
         return -2;
     }
 
     /* Check cache */
     if (g_config.use_cache && file_cache_is_valid(g_weather_cache, cache_key)) {
-        printf("[METEO] Cache HIT\n");
+        LOG_DEBUG("METEO", "Cache HIT");
 
         json_t* cached_json = NULL;
         if (file_cache_load_json(g_weather_cache, cache_key,
@@ -262,9 +263,9 @@ int open_meteo_api_get_current_async(Location*          location,
             }
         }
 
-        fprintf(stderr, "[METEO] Cache load failed\n");
+        LOG_ERROR("METEO", "Cache load failed");
     } else {
-        printf("[METEO] Cache MISS\n");
+        LOG_DEBUG("METEO", "Cache MISS");
     }
 
     /* Fetch from API asynchronously */
@@ -274,13 +275,12 @@ int open_meteo_api_get_current_async(Location*          location,
 
 int open_meteo_api_get_current(Location* location, WeatherData** data) {
     if (!location || !data) {
-        fprintf(stderr, "[METEO] Invalid parameters\n");
+        LOG_WARN("METEO", "Invalid parameters");
         return -1;
     }
 
-    fprintf(stderr,
-            "[METEO] Warning: open_meteo_api_get_current() is deprecated. "
-            "Use open_meteo_api_get_current_async() instead.\n");
+    LOG_WARN("METEO", "open_meteo_api_get_current() is deprecated. "
+                      "Use open_meteo_api_get_current_async() instead.");
 
     /* This synchronous version is kept for backward compatibility
      * but should be migrated to the async version */
@@ -293,13 +293,13 @@ int open_meteo_api_get_current(Location* location, WeatherData** data) {
     char cache_key[FILE_CACHE_KEY_LENGTH];
     if (file_cache_generate_key(g_weather_cache, key_input, cache_key,
                                 sizeof(cache_key)) != FILE_CACHE_OK) {
-        fprintf(stderr, "[METEO] Failed to generate cache key\n");
+        LOG_ERROR("METEO", "Failed to generate cache key");
         return -2;
     }
 
     /* Check cache */
     if (g_config.use_cache && file_cache_is_valid(g_weather_cache, cache_key)) {
-        printf("[METEO] Cache HIT\n");
+        LOG_DEBUG("METEO", "Cache HIT");
 
         json_t* cached_json = NULL;
         if (file_cache_load_json(g_weather_cache, cache_key,
@@ -312,16 +312,13 @@ int open_meteo_api_get_current(Location* location, WeatherData** data) {
             }
         }
 
-        fprintf(stderr, "[METEO] Cache load failed\n");
+        LOG_ERROR("METEO", "Cache load failed");
     } else {
-        printf("[METEO] Cache MISS\n");
+        LOG_DEBUG("METEO", "Cache MISS");
     }
 
-    fprintf(
-        stderr,
-        "[METEO] ERROR: Synchronous API fetch not supported in async mode.\n");
-    fprintf(stderr,
-            "[METEO] Please migrate to open_meteo_api_get_current_async().\n");
+    LOG_ERROR("METEO", "Synchronous API fetch not supported in async mode.");
+    LOG_ERROR("METEO", "Please migrate to open_meteo_api_get_current_async().");
     return -99;
 }
 
@@ -339,7 +336,7 @@ void open_meteo_api_cleanup(void) {
         file_cache_destroy(g_weather_cache);
         g_weather_cache = NULL;
     }
-    printf("[METEO] API cleaned up\n");
+    LOG_INFO("METEO", "API cleaned up");
 }
 
 const char* open_meteo_api_get_description(int weather_code) {
@@ -593,7 +590,7 @@ static int fetch_weather_from_api_async(Location*          location,
         return -1;
     }
 
-    printf("[METEO] Fetching: %s\n", url);
+    LOG_DEBUG("METEO", "Fetching: %s", url);
 
     /* Allocate async context */
     AsyncWeatherContext* ctx =
@@ -625,7 +622,7 @@ static int fetch_weather_from_api_async(Location*          location,
         http_client_get(url, NULL, 30000, http_fetch_async_callback, ctx);
 
     if (result != 0) {
-        fprintf(stderr, "[METEO] Failed to start HTTP request\n");
+        LOG_ERROR("METEO", "Failed to start HTTP request");
         if (ctx->location->name) {
             free((void*)ctx->location->name);
         }

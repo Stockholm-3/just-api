@@ -11,6 +11,7 @@
 #include "weather_location_handler.h"
 
 #include "geocoding_api.h"
+#include "logger/logger.h"
 #include "open_meteo_api.h"
 #include "open_meteo_handler.h"
 #include "popular_cities.h"
@@ -74,12 +75,12 @@ static int ensure_initialized(void) {
         return 0; /* Already initialized */
     }
 
-    printf("[WEATHER_LOCATION] Initializing modules...\n");
+    LOG_INFO("WEATHER_LOCATION", "Initializing modules...");
 
     /* FIX: Initialize Weather API FIRST */
     /* This will create ./cache/ and set up caching */
     if (open_meteo_handler_init() != 0) {
-        fprintf(stderr, "[WEATHER_LOCATION] Failed to init weather API\n");
+        LOG_ERROR("WEATHER_LOCATION", "Failed to init weather API");
         return -1;
     }
 
@@ -91,7 +92,7 @@ static int ensure_initialized(void) {
                                   .language    = "eng"};
 
     if (geocoding_api_init(&geo_config) != 0) {
-        fprintf(stderr, "[WEATHER_LOCATION] Failed to init geocoding API\n");
+        LOG_ERROR("WEATHER_LOCATION", "Failed to init geocoding API");
         return -1;
     }
 
@@ -101,19 +102,19 @@ static int ensure_initialized(void) {
                             &g_wlh_popular_cities_db);
 
     if (cities_result != 0) {
-        fprintf(stderr,
-                "[WEATHER_LOCATION] Warning: Failed to load popular cities "
-                "database (fallback to API-only mode)\n");
+        LOG_WARN("WEATHER_LOCATION",
+                 "Failed to load popular cities database (fallback to "
+                 "API-only mode)");
         /* Not a critical error - continue without local database */
         g_popular_cities_db = NULL;
     } else {
-        printf("[WEATHER_LOCATION] Loaded popular cities database\n");
+        LOG_INFO("WEATHER_LOCATION", "Loaded popular cities database");
         /* Set the global pointer for geocoding_api to use */
         g_popular_cities_db = g_wlh_popular_cities_db;
     }
 
     g_initialized = true;
-    printf("[WEATHER_LOCATION] All modules initialized successfully\n");
+    LOG_INFO("WEATHER_LOCATION", "All modules initialized successfully");
     return 0;
 }
 
@@ -179,9 +180,9 @@ int weather_location_handler_by_city(const char* query_string,
         return -1;
     }
 
-    printf("[WEATHER_LOCATION] Request for city: %s%s%s%s%s\n", city,
-           region[0] ? ", " : "", region, country[0] ? " (" : "",
-           country[0] ? country : "");
+    LOG_INFO("WEATHER_LOCATION", "Request for city: %s%s%s%s%s", city,
+             region[0] ? ", " : "", region, country[0] ? " (" : "",
+             country[0] ? country : "");
 
     /* 1. Find city coordinates via geocoding */
     GeocodingResponse* geo_response = NULL;
@@ -222,9 +223,9 @@ int weather_location_handler_by_city(const char* query_string,
         return -1;
     }
 
-    printf("[WEATHER_LOCATION] Found: %s, %s (%.4f, %.4f)\n",
-           best_location->name, best_location->country, best_location->latitude,
-           best_location->longitude);
+    LOG_DEBUG("WEATHER_LOCATION", "Found: %s, %s (%.4f, %.4f)",
+              best_location->name, best_location->country,
+              best_location->latitude, best_location->longitude);
 
     /* 2. Fetch weather for the found coordinates */
     Location location = {.latitude  = best_location->latitude,
@@ -322,7 +323,7 @@ int weather_location_handler_by_city(const char* query_string,
     }
 
     *status_code = HTTP_OK;
-    printf("[WEATHER_LOCATION] Response generated successfully\n");
+    LOG_INFO("WEATHER_LOCATION", "Response generated successfully");
     return 0;
 }
 
@@ -462,7 +463,7 @@ void weather_location_handler_cleanup(void) {
     }
 
     g_initialized = false;
-    printf("[WEATHER_LOCATION] Handler cleaned up\n");
+    LOG_INFO("WEATHER_LOCATION", "Handler cleaned up");
 }
 
 /* ============= Internal Functions ============= */
@@ -598,8 +599,8 @@ int weather_location_handler_by_city_async(HTTPServerConnection* conn,
         return -1;
     }
 
-    printf("[WEATHER_LOCATION] Query: city='%s', country='%s', region='%s'\n",
-           city, country, region);
+    LOG_INFO("WEATHER_LOCATION", "Query: city='%s', country='%s', region='%s'",
+             city, country, region);
 
     GeocodingResponse* geo_response = NULL;
     int                result =
@@ -645,9 +646,9 @@ int weather_location_handler_by_city_async(HTTPServerConnection* conn,
         return -1;
     }
 
-    printf("[WEATHER_LOCATION] Found: %s, %s (%.4f, %.4f)\n",
-           best_location->name, best_location->country, best_location->latitude,
-           best_location->longitude);
+    LOG_DEBUG("WEATHER_LOCATION", "Found: %s, %s (%.4f, %.4f)",
+              best_location->name, best_location->country,
+              best_location->latitude, best_location->longitude);
 
     AsyncWeatherLocationContext* ctx =
         malloc(sizeof(AsyncWeatherLocationContext));

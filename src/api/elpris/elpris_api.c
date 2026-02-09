@@ -3,6 +3,7 @@
 #include <file_cache.h>
 #include <http_client.h>
 #include <http_utils.h>
+#include <logger/logger.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -223,12 +224,12 @@ static void on_http_response(const char* event, const char* response,
     } else {
         /* Handle errors */
         if (strcmp(event, "ERROR") == 0) {
-            printf("[ELPRIS] HTTP error: %s\n",
-                   response ? response : "unknown");
+            LOG_ERROR("ELPRIS", "HTTP error: %s",
+                      response ? response : "unknown");
         } else if (strcmp(event, "TIMEOUT") == 0) {
-            printf("[ELPRIS] Request timeout\n");
+            LOG_ERROR("ELPRIS", "Request timeout");
         } else {
-            printf("[ELPRIS] Invalid response\n");
+            LOG_WARN("ELPRIS", "Invalid response");
         }
 
         send_json_error(ctx->conn, 503,
@@ -277,7 +278,7 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
 
         char* cached = NULL;
         if (file_cache_load(cache, cache_key, &cached, NULL) == FILE_CACHE_OK) {
-            printf("[ELPRIS] Cache hit: %s\n", key_input);
+            LOG_DEBUG("ELPRIS", "Cache hit: %s", key_input);
             send_response(conn, 200, "application/json", cached,
                           strlen(cached));
             free(cached);
@@ -301,7 +302,7 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
     snprintf(url, sizeof(url), BASE_URL "%04u/%02u-%02u_%s.json", parsed.year,
              parsed.month, parsed.day, parsed.price_group);
 
-    printf("[ELPRIS] Fetching: %s\n", url);
+    LOG_DEBUG("ELPRIS", "Fetching: %s", url);
 
     return http_client_get(url, NULL, 30000, on_http_response, ctx);
 }
