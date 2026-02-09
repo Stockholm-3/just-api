@@ -1,8 +1,8 @@
 /**
- * geocoding_api.h - Geocoding API for searching city coordinates
+ * geocoding_api.h - Geokodnings-API för att söka stadskoordinater
  *
- * Module for converting a city name into geographic coordinates.
- * Uses the Open-Meteo Geocoding API with result caching.
+ * Modul för att konvertera ett stadsnamn till geografiska koordinater.
+ * Använder Open-Meteo Geocoding API med resultat-caching.
  */
 
 #ifndef GEOCODING_API_H
@@ -46,22 +46,22 @@ typedef struct {
 } GeocodingConfig;
 
 /**
- * Initialize the geocoding API
+ * Initierar geokodnings-API:t
  *
- * @param config Configuration (NULL for defaults)
- * @return 0 on success, -1 on error
+ * @param config Konfiguration (NULL för standardinställningar)
+ * @return 0 vid framgång, -1 vid fel
  */
 int geocoding_api_init(GeocodingConfig* config);
 
 /**
- * Search for a city by name
+ * Sök efter en stad med namn
  *
- * @param city_name City name to search for (required)
- * @param country Country code to filter results (optional, may be NULL)
- * @param response Pointer to the search result (caller must free)
- * @return 0 on success, < 0 on error
+ * @param city_name Stadsnamn att söka efter (obligatoriskt)
+ * @param country Landskod för att filtrera resultat (valfritt, kan vara NULL)
+ * @param response Pekare till sökresultatet (anropande kod måste frigöra)
+ * @return 0 vid framgång, < 0 vid fel
  *
- * Usage examples:
+ * Exempel:
  *   geocoding_api_search("Kyiv", "UA", &response);
  *   geocoding_api_search("Stockholm", NULL, &response);
  *   geocoding_api_search("London", "GB", &response);
@@ -70,46 +70,46 @@ int geocoding_api_search(const char* city_name, const char* country,
                          GeocodingResponse** response);
 
 /*
- * Search without writing to cache. Useful for endpoints that should not
- * create or update the shared city cache (e.g. autocomplete /cities).
+ * Sök utan att skriva till cache. Användbart för endpoints som inte ska
+ * skapa eller uppdatera den delade stadscachen (t.ex. autocomplete /cities).
  */
 int geocoding_api_search_no_cache(const char* city_name, const char* country,
                                   GeocodingResponse** response);
 
-/* Try to load results from cache first (read-only). If cache is missing or
- * expired, fetch from API but do NOT save results to cache. Returns 0 on
- * success and fills `response` (caller must free). */
+/* Försök först ladda resultat från cache (read-only). Om cache saknas eller
+ * har gått ut, hämta från API men SPARA INTE resultaten i cachen. Returnerar
+ * 0 vid framgång och fyller `response` (anropande kod måste frigöra). */
 int geocoding_api_search_readonly_cache(const char*         city_name,
                                         const char*         country,
                                         GeocodingResponse** response);
 
 /**
- * Smart search with 3-tier fallback strategy
+ * Smart sökning med 3-nivåers fallback-strategi
  *
- * Searches in this order:
- * 1. Popular Cities DB (in-memory, fastest)
- * 2. File cache (fast)
- * 3. Open-Meteo API (slow, uses quota)
+ * Söker i följande ordning:
+ * 1. Databas med populära städer (i minnet, snabbast)
+ * 2. Filcache (snabbt)
+ * 3. Open-Meteo API (långsammare, använder kvota)
  *
- * @param query Search query (min 2 characters)
- * @param response Pointer to search result (caller must free)
- * @return 0 on success, < 0 on error
+ * @param query Söksträng (minst 2 tecken)
+ * @param response Pekare till sökresultat (anropande kod måste frigöra)
+ * @return 0 vid framgång, < 0 vid fel
  *
- * This function minimizes API calls for autocomplete by checking
- * local databases first.
+ * Funktionen minskar API-anrop för autocomplete genom att först kontrollera
+ * lokala databaser.
  */
 int geocoding_api_search_smart(const char* query, GeocodingResponse** response);
 
 /**
- * Search for a city by name with an additional region filter
+ * Sök efter en stad med extra regionsfilter
  *
- * @param city_name City name
- * @param region Region / province (optional)
- * @param country Country code (optional)
- * @param response Pointer to the search result
- * @return 0 on success, < 0 on error
+ * @param city_name Stadsnamn
+ * @param region Region/provins (valfritt)
+ * @param country Landskod (valfritt)
+ * @param response Pekare till sökresultatet
+ * @return 0 vid framgång, < 0 vid fel
  *
- * Example:
+ * Exempel:
  *   geocoding_api_search_detailed("Lviv", "Lviv Oblast", "UA", &response);
  */
 int geocoding_api_search_detailed(const char* city_name, const char* region,
@@ -117,42 +117,42 @@ int geocoding_api_search_detailed(const char* city_name, const char* region,
                                   GeocodingResponse** response);
 
 /**
- * Get the best result (the one with the largest population)
+ * Hämta bästa resultatet (det med störst befolkning)
  *
- * @param response Search response
- * @return Pointer to the best result or NULL
+ * @param response Sökresultat
+ * @return Pekare till bästa resultat eller NULL
  */
 GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response,
                                                const char*        country);
 
 /**
- * Free the memory for a search response
+ * Frigör minnet för ett sökresultat
  *
- * @param response Response to free
+ * @param response Resultat att frigöra
  */
 void geocoding_api_free_response(GeocodingResponse* response);
 
 /**
- * Clear the cache
+ * Rensa cachen
  *
- * @return 0 on success
+ * @return 0 vid framgång
  */
 int geocoding_api_clear_cache(void);
 
 /**
- * Cleanup the geocoding module
+ * Avsluta och rensa upp geokodningsmodulen
  */
 void geocoding_api_cleanup(void);
 
 /**
- * Format a result into a readable string
+ * Formatera ett resultat till en läsbar sträng
  *
- * @param result Geocoding result
- * @param buffer Output buffer
- * @param buffer_size Buffer size
- * @return 0 on success
+ * @param result Geokodningsresultat
+ * @param buffer Utdatabuffer
+ * @param buffer_size Buffertstorlek
+ * @return 0 vid framgång
  *
- * Example output: "Kyiv, Kyiv Oblast, Ukraine (50.4501, 30.5234)"
+ * Exempelutdata: "Kyiv, Kyiv Oblast, Ukraine (50.4501, 30.5234)"
  */
 int geocoding_api_format_result(GeocodingResult* result, char* buffer,
                                 size_t buffer_size);

@@ -1,14 +1,17 @@
 /**
- * geocoding_api.c - Geocoding API implementation
+ * geocoding_api.c - Implementation av geokodnings-API
  *
- * Uses the Open-Meteo Geocoding API to search for city coordinates
- * API documentation: https://open-meteo.com/en/docs/geocoding-api
+ * Använder Open-Meteo Geocoding API för att söka efter koordinater
+ * för städer.
+ * API-dokumentation: https://open-meteo.com/en/docs/geocoding-api
  */
 
 #include <cache_utils/file_cache.h>
 #include <ctype.h>
 #include <errno.h>
 #include <geocoding_api.h>
+#include <geocoding_http.h>
+#include <geocoding_parser.h>
 #include <http_client.h>
 #include <jansson.h>
 #include <stdio.h>
@@ -16,7 +19,7 @@
 #include <string.h>
 #include <time.h>
 
-/* ============= Configuration ============= */
+/* ============= Konfiguration ============= */
 
 #define GEOCODING_API_URL "http://geocoding-api.open-meteo.com/v1/search"
 #define DEFAULT_CACHE_DIR "./cache/geo_cache"
@@ -24,7 +27,7 @@
 #define DEFAULT_MAX_RESULTS 10
 #define DEFAULT_LANGUAGE "eng"
 
-/* ============= Global State ============= */
+/* ============= Globalt tillstånd ============= */
 
 static GeocodingConfig g_config = {.cache_dir   = DEFAULT_CACHE_DIR,
                                    .cache_ttl   = DEFAULT_CACHE_TTL,
@@ -32,36 +35,22 @@ static GeocodingConfig g_config = {.cache_dir   = DEFAULT_CACHE_DIR,
                                    .max_results = DEFAULT_MAX_RESULTS,
                                    .language    = DEFAULT_LANGUAGE};
 
-/* Popular cities database pointer (set by weather_location_handler) */
+/* Pekare till databas med populära städer (sätts av weather_location_handler)
+ */
 void* g_popular_cities_db = NULL;
 
 /* Cache instance */
 static FileCacheInstance* g_geo_cache = NULL;
 
-/* ============= Internal Structures ============= */
+/* ============= Interna strukturer ============= */
 
-typedef struct {
-    char*        response_data;
-    size_t       response_size;
-    int          http_status;
-    volatile int completed;
-    volatile int error;
-} HttpFetchContext;
+/* ============= Interna funktioner ============= */
 
-/* ============= Internal Functions ============= */
+static int fetch_from_api(const char* city_name, const char* country,
+                          GeocodingResponse** response);
+/* JSON parsing moved to geocoding_parser.c */
 
-static void  http_fetch_callback(const char* event, const char* response,
-                                 void* context);
-static int   fetch_url_sync(const char* url, char** response_data,
-                            int* http_status);
-static int   fetch_from_api(const char* city_name, const char* country,
-                            GeocodingResponse** response);
-static char* build_api_url(const char* city_name, const char* country,
-                           int max_results, const char* language);
-static int   parse_geocoding_json(const char*         json_str,
-                                  GeocodingResponse** response);
-
-/* ============= Public API Implementation ============= */
+/* ============= Implementation av publikt API ============= */
 
 int geocoding_api_init(GeocodingConfig* config) {
     if (config) {
@@ -97,9 +86,9 @@ int geocoding_api_search(const char* city_name, const char* country,
         return -1;
     }
 
-    /* Generate cache key: use only normalized city name (user requested)
-     * This makes cache files shared by city regardless of country/language
-     * or small input variations (case/whitespace).
+    /* Generera cache-nyckel: använd endast normaliserat stadsnamn
+     * Detta gör cache-filer delade per stad oberoende av land/språk
+     * eller små indatavariationer (versaler/whitespace).
      */
     char normalized[256];
     file_cache_normalize_string(city_name, normalized, sizeof(normalized));
@@ -114,7 +103,7 @@ int geocoding_api_search(const char* city_name, const char* country,
     printf("[GEOCODING] Searching for: %s%s%s\n", city_name,
            country ? " in " : "", country ? country : "");
 
-    /* Check cache */
+    /* Kontrollera cache */
     if (g_config.use_cache && file_cache_is_valid(g_geo_cache, cache_key)) {
         printf("[GEOCODING] Cache HIT - loading from file\n");
 
@@ -125,7 +114,7 @@ int geocoding_api_search(const char* city_name, const char* country,
             json_decref(cached_json);
 
             if (json_str) {
-                int result = parse_geocoding_json(json_str, response);
+                int result = geocoding_parse_json(json_str, response);
                 free(json_str);
                 if (result == 0) {
                     return 0; /* Successfully loaded from cache */
@@ -142,7 +131,7 @@ int geocoding_api_search(const char* city_name, const char* country,
         }
     }
 
-    /* Fetch from API */
+    /* Hämta från API */
     int result = fetch_from_api(city_name, country, response);
 
     if (result != 0) {
@@ -150,7 +139,7 @@ int geocoding_api_search(const char* city_name, const char* country,
         return -3;
     }
 
-    /* Save to cache */
+    /* Spara till cache */
     if (g_config.use_cache && *response) {
         /* Convert response back to JSON for saving */
         json_t* root          = json_object();
@@ -173,12 +162,6 @@ int geocoding_api_search(const char* city_name, const char* country,
             if (r->admin2[0]) {
                 json_object_set_new(item, "admin2", json_string(r->admin2));
             }
-            if (r->population > 0) {
-                json_object_set_new(item, "population",
-                                    json_integer(r->population));
-            }
-            if (r->timezone[0]) {
-                json_object_set_new(item, "timezone", json_string(r->timezone));
             }
 
             json_array_append_new(results_array, item);
@@ -244,7 +227,7 @@ int geocoding_api_search_readonly_cache(const char*         city_name,
             json_decref(cached_json);
 
             if (json_str) {
-                int result = parse_geocoding_json(json_str, response);
+                int result = geocoding_parse_json(json_str, response);
                 free(json_str);
                 return result;
             }
@@ -264,10 +247,6 @@ typedef struct {
     char   country_code[8];
     double latitude;
     double longitude;
-    int    population;
-} PopularCity;
-
-extern int popular_cities_search(void* db, const char* query,
                                  PopularCity** results, size_t* count,
                                  size_t max_results);
 
@@ -301,10 +280,6 @@ static GeocodingResponse* convert_popular_to_geocoding(PopularCity** cities,
                 sizeof(gr->country_code) - 1);
         gr->latitude    = (float)pc->latitude;
         gr->longitude   = (float)pc->longitude;
-        gr->population  = pc->population;
-        gr->id          = 0; /* Not available in PopularCity */
-        gr->admin1[0]   = '\0';
-        gr->admin2[0]   = '\0';
         gr->timezone[0] = '\0';
     }
 
@@ -448,11 +423,6 @@ GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response,
 
     /* If a country is provided, prefer results that match it. Match by
      * country code first (case-insensitive), then by country name. If
-     * multiple matches exist, pick the one with largest population. If no
-     * match is found, fall back to the result with the largest population or
-     * the first result.
-     */
-    GeocodingResult* best = NULL;
 
     if (country && country[0] != '\0') {
         /* try country code match (case-insensitive) */
@@ -460,10 +430,6 @@ GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response,
             GeocodingResult* r = &response->results[i];
             if (r->country_code[0] != '\0') {
                 if (strcasecmp(r->country_code, country) == 0) {
-                    if (!best || r->population > best->population) {
-                        best = r;
-                    }
-                }
             }
         }
 
@@ -475,24 +441,12 @@ GeocodingResult* geocoding_api_get_best_result(GeocodingResponse* response,
                 if (r->country[0] != '\0') {
                     if (strcasecmp(r->country, country) == 0 ||
                         strcasestr(r->country, country) != NULL) {
-                        if (!best || r->population > best->population) {
-                            best = r;
-                        }
-                    }
                 }
             }
         }
     }
 
-    /* If still no best, pick the highest-population result, or first as
-     * fallback */
-    if (!best) {
-        for (int i = 0; i < response->count; ++i) {
             GeocodingResult* r = &response->results[i];
-            if (!best || r->population > best->population) {
-                best = r;
-            }
-        }
     }
 
     if (!best) {
@@ -556,232 +510,12 @@ int geocoding_api_format_result(GeocodingResult* result, char* buffer,
 
 /* ============= Internal Functions Implementation ============= */
 
-/* ============= HTTP Client Integration ============= */
-
-static HttpFetchContext* g_fetch_context = NULL;
-
-static void http_fetch_callback(const char* event, const char* response,
-                                void* context) {
-    if (!g_fetch_context) {
-        return;
-    }
-
-    if (strcmp(event, "RESPONSE") == 0) {
-        g_fetch_context->response_data = strdup(response);
-        g_fetch_context->response_size = strlen(response);
-        g_fetch_context->http_status   = 200;
-        g_fetch_context->completed     = 1;
-    } else if (strcmp(event, "ERROR") == 0 || strcmp(event, "TIMEOUT") == 0) {
-        g_fetch_context->error     = 1;
-        g_fetch_context->completed = 1;
-    }
-}
-
-static int fetch_url_sync(const char* url, char** response_data,
-                          int* http_status) {
-    HttpFetchContext context = {0};
-    g_fetch_context          = &context;
-
-    http_client_get(url, NULL, 30000, http_fetch_callback, NULL);
-
-    /* Poll event loop - fast iterations, no sleep! */
-    time_t start_time      = time(NULL);
-    time_t timeout_seconds = 30;
-
-    while (!context.completed) {
-        smw_work(0); /* Pass 0 if monotonic time unavailable */
-
-        /* Check timeout (1 second granularity) */
-        if (time(NULL) - start_time > timeout_seconds) {
-            fprintf(stderr, "[GEOCODING] Timeout waiting for response\n");
-            break;
-        }
-    }
-
-    g_fetch_context = NULL;
-
-    if (context.error || !context.completed) {
-        if (context.response_data) {
-            free(context.response_data);
-        }
-        return -1;
-    }
-
-    *response_data = context.response_data;
-    *http_status   = context.http_status;
-
-    return 0;
-}
-
-/* Helper function: simple URL encoding */
-static int url_encode_char(const char* src, int src_len, char* dst,
-                           int dst_size) {
-    int dst_pos = 0;
-    for (int i = 0; i < src_len && dst_pos + 3 < dst_size; i++) {
-        unsigned char c = (unsigned char)src[i];
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-            (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' ||
-            c == '~') {
-            dst[dst_pos++] = c;
-        } else if (c == ' ') {
-            dst[dst_pos++] = '+';
-        } else {
-            if (dst_pos + 2 >= dst_size) {
-                break;
-            }
-            dst_pos += snprintf(dst + dst_pos, dst_size - dst_pos, "%%%02X", c);
-        }
-    }
-    dst[dst_pos] = '\0';
-    return dst_pos;
-}
-
-/**
- * Build URL for API request
- */
-static char* build_api_url(const char* city_name, const char* country,
-                           int max_results, const char* language) {
-    char* url = malloc(2048);
-    if (!url) {
-        return NULL;
-    }
-
-    /* Encode city name */
-    char encoded_city[512];
-    url_encode_char(city_name, strlen(city_name), encoded_city,
-                    sizeof(encoded_city));
-
-    int written =
-        snprintf(url, 2048, "%s?name=%s&count=%d&language=%s&format=json",
-                 GEOCODING_API_URL, encoded_city, max_results, language);
-
-    if (country) {
-        /* Encode country if present */
-        char encoded_country[256];
-        url_encode_char(country, strlen(country), encoded_country,
-                        sizeof(encoded_country));
-        written += snprintf(url + written, 2048 - written, "&country=%s",
-                            encoded_country);
-    }
-
-    return url;
-}
+/* HTTP and URL building implemented in geocoding_http.c */
 
 /**
  * Parse JSON response from the API
  */
-static int parse_geocoding_json(const char*         json_str,
-                                GeocodingResponse** response) {
-    json_error_t error;
-    json_t*      root = json_loadb(json_str, strlen(json_str), 0, &error);
-
-    if (!root) {
-        fprintf(stderr, "[GEOCODING] JSON parse error: %s\n", error.text);
-        return -1;
-    }
-
-    json_t* results_array = json_object_get(root, "results");
-    if (!results_array) {
-        /* No results */
-        *response            = calloc(1, sizeof(GeocodingResponse));
-        (*response)->count   = 0;
-        (*response)->results = NULL;
-        json_decref(root);
-        return 0;
-    }
-
-    if (!json_is_array(results_array)) {
-        fprintf(stderr, "[GEOCODING] Invalid results format\n");
-        json_decref(root);
-        return -2;
-    }
-
-    size_t count = json_array_size(results_array);
-    if (count == 0) {
-        *response            = calloc(1, sizeof(GeocodingResponse));
-        (*response)->count   = 0;
-        (*response)->results = NULL;
-        json_decref(root);
-        return 0;
-    }
-
-    /* Allocate memory */
-    *response = calloc(1, sizeof(GeocodingResponse));
-    if (!*response) {
-        json_decref(root);
-        return -3;
-    }
-
-    (*response)->results = calloc(count, sizeof(GeocodingResult));
-    if (!(*response)->results) {
-        free(*response);
-        json_decref(root);
-        return -4;
-    }
-
-    (*response)->count = count;
-
-    /* Parse each result */
-    for (size_t i = 0; i < count; i++) {
-        json_t*          item   = json_array_get(results_array, i);
-        GeocodingResult* result = &(*response)->results[i];
-
-        /* Required fields */
-        json_t* id           = json_object_get(item, "id");
-        json_t* name         = json_object_get(item, "name");
-        json_t* lat          = json_object_get(item, "latitude");
-        json_t* lon          = json_object_get(item, "longitude");
-        json_t* country_name = json_object_get(item, "country");
-        json_t* country_code = json_object_get(item, "country_code");
-
-        if (id) {
-            result->id = json_integer_value(id);
-        }
-        if (name) {
-            strncpy(result->name, json_string_value(name),
-                    sizeof(result->name) - 1);
-        }
-        if (lat) {
-            result->latitude = json_real_value(lat);
-        }
-        if (lon) {
-            result->longitude = json_real_value(lon);
-        }
-        if (country_name) {
-            strncpy(result->country, json_string_value(country_name),
-                    sizeof(result->country) - 1);
-        }
-        if (country_code) {
-            strncpy(result->country_code, json_string_value(country_code),
-                    sizeof(result->country_code) - 1);
-        }
-
-        /* Optional fields */
-        json_t* admin1     = json_object_get(item, "admin1");
-        json_t* admin2     = json_object_get(item, "admin2");
-        json_t* population = json_object_get(item, "population");
-        json_t* timezone   = json_object_get(item, "timezone");
-
-        if (admin1) {
-            strncpy(result->admin1, json_string_value(admin1),
-                    sizeof(result->admin1) - 1);
-        }
-        if (admin2) {
-            strncpy(result->admin2, json_string_value(admin2),
-                    sizeof(result->admin2) - 1);
-        }
-        if (population) {
-            result->population = json_integer_value(population);
-        }
-        if (timezone) {
-            strncpy(result->timezone, json_string_value(timezone),
-                    sizeof(result->timezone) - 1);
-        }
-    }
-
-    json_decref(root);
-    return 0;
-}
+/* JSON parsing implemented in src/api/geocoding/geocoding_parser.c */
 
 /**
  * Fetch data from API
@@ -789,8 +523,8 @@ static int parse_geocoding_json(const char*         json_str,
 static int fetch_from_api(const char* city_name, const char* country,
                           GeocodingResponse** response) {
     /* Build URL */
-    char* url = build_api_url(city_name, country, g_config.max_results,
-                              g_config.language);
+    char* url = geocoding_build_api_url(
+        city_name, country, g_config.max_results, g_config.language);
     if (!url) {
         return -1;
     }
@@ -800,7 +534,7 @@ static int fetch_from_api(const char* city_name, const char* country,
     char* response_data = NULL;
     int   http_status   = 0;
 
-    int result = fetch_url_sync(url, &response_data, &http_status);
+    int result = geocoding_fetch_url_sync(url, &response_data, &http_status);
     free(url);
 
     if (result != 0 || !response_data) {
@@ -808,7 +542,7 @@ static int fetch_from_api(const char* city_name, const char* country,
     }
 
     /* Parse JSON */
-    int parse_result = parse_geocoding_json(response_data, response);
+    int parse_result = geocoding_parse_json(response_data, response);
 
     free(response_data);
 
