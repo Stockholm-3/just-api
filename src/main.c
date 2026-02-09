@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #define DEFAULT_LOG_DIR "./logs"
+#define DEFAULT_BASE_DIR "."
 
 static volatile sig_atomic_t g_shutdown_requested = 0;
 
@@ -20,17 +21,34 @@ static void handle_shutdown_signal(int signum) {
 }
 
 int main(int argc, char* argv[]) {
-    const char* log_dir = DEFAULT_LOG_DIR;
+    const char* log_dir  = DEFAULT_LOG_DIR;
+    const char* base_dir = DEFAULT_BASE_DIR;
 
-    // Parse --log-dir argument
+    // Parse arguments
     static struct option long_options[] = {
-        {"log-dir", required_argument, 0, 'l'}, {0, 0, 0, 0}};
+        {"log-dir", required_argument, 0, 'l'},
+        {"base-dir", required_argument, 0, 'b'},
+        {0, 0, 0, 0}};
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "l:", long_options, NULL)) != -1) {
-        if (opt == 'l') {
+    while ((opt = getopt_long(argc, argv, "l:b:", long_options, NULL)) != -1) {
+        switch (opt) {
+        case 'l':
             log_dir = optarg;
+            break;
+        case 'b':
+            base_dir = optarg;
+            break;
+        default:
+            break;
         }
+    }
+
+    // Change to base directory so relative paths (cache, data) resolve
+    // correctly
+    if (chdir(base_dir) != 0) {
+        fprintf(stderr, "Failed to chdir to base directory: %s\n", base_dir);
+        return 1;
     }
 
     // Initialize logger
@@ -64,7 +82,6 @@ int main(int argc, char* argv[]) {
     LOG_INFO("MAIN", "Shutdown signal received, cleaning up...");
     weather_server_dispose(&server);
     smw_dispose();
-    LOG_INFO("MAIN", "Server stopped gracefully");
 
     logger_shutdown();
     return 0;

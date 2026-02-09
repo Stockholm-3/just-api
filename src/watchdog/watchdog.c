@@ -49,6 +49,7 @@ typedef struct {
 static volatile sig_atomic_t g_shutdown_requested = 0;
 static WatchdogState         g_state              = {0};
 static const char*           g_log_dir            = NULL;
+static const char*           g_base_dir           = NULL;
 
 static void watchdog_signal_handler(int signum) {
     if (signum == SIGTERM || signum == SIGINT) {
@@ -145,7 +146,8 @@ static pid_t spawn_server(const char* server_path) {
 
     if (pid == 0) {
         // Child: exec the server with log directory
-        execl(server_path, server_path, "--log-dir", g_log_dir, NULL);
+        execl(server_path, server_path, "--log-dir", g_log_dir, "--base-dir",
+              g_base_dir, NULL);
         _exit(127);
     }
 
@@ -293,6 +295,14 @@ int main(int argc, char* argv[]) {
     }
     config.log_dir = abs_log_dir;
     g_log_dir      = abs_log_dir;
+
+    // Convert current directory to absolute path (base dir for server)
+    static char abs_base_dir[PATH_MAX];
+    if (realpath(".", abs_base_dir) == NULL) {
+        fprintf(stderr, "Cannot resolve base directory\n");
+        return 1;
+    }
+    g_base_dir = abs_base_dir;
 
     // Initialize logger before anything else
     if (logger_init(config.log_dir, LOG_DEBUG) != 0) {
