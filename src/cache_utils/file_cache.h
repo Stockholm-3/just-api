@@ -23,8 +23,18 @@ typedef enum {
     FILE_CACHE_ERROR_IO        = -4, /* File I/O error */
     FILE_CACHE_ERROR_MEMORY    = -5, /* Memory allocation failed */
     FILE_CACHE_ERROR_HASH      = -6, /* Hash computation failed */
-    FILE_CACHE_ERROR_PARSE     = -7  /* JSON parse error */
+    FILE_CACHE_ERROR_PARSE     = -7, /* JSON parse error */
+    FILE_CACHE_ERROR_LOCK      = -8  /* File lock acquisition failed */
 } FileCacheResult;
+
+/* Lock mode for file_cache_lock */
+typedef enum {
+    FILE_CACHE_LOCK_SHARED    = 0, /* Multiple readers allowed */
+    FILE_CACHE_LOCK_EXCLUSIVE = 1  /* Single writer, blocks all others */
+} FileCacheLockMode;
+
+/* Opaque lock handle returned by file_cache_lock */
+typedef struct FileCacheLock FileCacheLock;
 
 /* Configuration for a cache instance */
 typedef struct {
@@ -102,6 +112,33 @@ FileCacheResult file_cache_load(FileCacheInstance* cache, const char* cache_key,
  */
 FileCacheResult file_cache_save(FileCacheInstance* cache, const char* cache_key,
                                 const char* data, size_t data_size);
+
+/* ============= File Locking ============= */
+
+/**
+ * Acquire a file lock on a cache entry.
+ *
+ * Use FILE_CACHE_LOCK_SHARED for read protection (multiple readers OK).
+ * Use FILE_CACHE_LOCK_EXCLUSIVE for write protection (blocks all others).
+ * Lock multiple files simultaneously for atomic batch reads.
+ *
+ * @param cache      Cache instance
+ * @param cache_key  The cache key
+ * @param mode       Lock mode (shared or exclusive)
+ * @param out_lock   Output pointer for lock handle (caller must unlock)
+ * @return           FILE_CACHE_OK on success, error code otherwise
+ */
+FileCacheResult file_cache_lock(FileCacheInstance* cache, const char* cache_key,
+                                FileCacheLockMode mode,
+                                FileCacheLock**   out_lock);
+
+/**
+ * Release a file lock acquired by file_cache_lock().
+ * Safe to call with NULL (no-op).
+ *
+ * @param lock  Lock handle to release
+ */
+void file_cache_unlock(FileCacheLock* lock);
 
 /* ============= JSON Helpers ============= */
 

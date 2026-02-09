@@ -6,11 +6,13 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <hash_md5.h>
 #include <jansson.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -21,6 +23,10 @@ struct FileCacheInstance {
     char cache_dir[FILE_CACHE_MAX_PATH_LENGTH];
     int  ttl_seconds;
     bool enabled;
+};
+
+struct FileCacheLock {
+    int fd;
 };
 
 /* ============= Internal Helpers ============= */
@@ -230,19 +236,91 @@ FileCacheResult file_cache_save(FileCacheInstance* cache, const char* cache_key,
         data_size = strlen(data);
     }
 
-    FILE* fp = fopen(filepath, "w");
-    if (!fp) {
+    /* Open/create without truncation — truncate only after locking */
+    int fd = open(filepath, O_WRONLY | O_CREAT, 0644);
+    if (fd < 0) {
         return FILE_CACHE_ERROR_IO;
     }
 
-    size_t bytes_written = fwrite(data, 1, data_size, fp);
-    fclose(fp);
+    /* Acquire exclusive lock (blocks until all readers release) */
+    if (flock(fd, LOCK_EX) != 0) {
+        close(fd);
+        return FILE_CACHE_ERROR_LOCK;
+    }
 
-    if (bytes_written != data_size) {
+    /* Safe to truncate now — we hold the exclusive lock */
+    if (ftruncate(fd, 0) != 0) {
+        close(fd);
         return FILE_CACHE_ERROR_IO;
     }
+
+    /* Write data (handle partial writes and EINTR) */
+    size_t total_written = 0;
+    while (total_written < data_size) {
+        ssize_t written =
+            write(fd, data + total_written, data_size - total_written);
+        if (written < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            close(fd);
+            return FILE_CACHE_ERROR_IO;
+        }
+        total_written += (size_t)written;
+    }
+
+    close(fd);
 
     return FILE_CACHE_OK;
+}
+
+/* ============= File Locking Implementation ============= */
+
+FileCacheResult file_cache_lock(FileCacheInstance* cache, const char* cache_key,
+                                FileCacheLockMode mode,
+                                FileCacheLock**   out_lock) {
+    if (!cache || !cache_key || !out_lock) {
+        return FILE_CACHE_ERROR_PARAM;
+    }
+
+    char filepath[FILE_CACHE_MAX_PATH_LENGTH];
+    build_filepath(cache, cache_key, filepath, sizeof(filepath));
+
+    int fd = open(filepath, O_RDONLY);
+    if (fd < 0) {
+        return FILE_CACHE_ERROR_NOT_FOUND;
+    }
+
+    int lock_op = (mode == FILE_CACHE_LOCK_EXCLUSIVE) ? LOCK_EX : LOCK_SH;
+
+    if (flock(fd, lock_op) != 0) {
+        close(fd);
+        return FILE_CACHE_ERROR_LOCK;
+    }
+
+    FileCacheLock* lock = malloc(sizeof(FileCacheLock));
+    if (!lock) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        return FILE_CACHE_ERROR_MEMORY;
+    }
+
+    lock->fd  = fd;
+    *out_lock = lock;
+
+    return FILE_CACHE_OK;
+}
+
+void file_cache_unlock(FileCacheLock* lock) {
+    if (!lock) {
+        return;
+    }
+
+    if (lock->fd >= 0) {
+        close(lock->fd);
+    }
+
+    free(lock);
 }
 
 /* ============= JSON Helpers Implementation ============= */
