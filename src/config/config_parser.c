@@ -56,6 +56,11 @@ int config_parser_load(const char* filepath, ServerConfig* config) {
         if (max_conn && json_is_integer(max_conn)) {
             config->max_connections = json_integer_value(max_conn);
         }
+
+        json_t* daemon = json_object_get(server, "daemon_mode");
+        if (daemon && json_is_boolean(daemon)) {
+            config->daemon_mode = json_boolean_value(daemon);
+        }
     }
 
     /* Parse cache section */
@@ -65,6 +70,58 @@ int config_parser_load(const char* filepath, ServerConfig* config) {
         if (cache_dir && json_is_string(cache_dir)) {
             strncpy(config->cache.cache_dir, json_string_value(cache_dir),
                     sizeof(config->cache.cache_dir) - 1);
+        }
+
+        json_t* weather_ttl = json_object_get(cache, "weather_ttl_seconds");
+        if (weather_ttl && json_is_integer(weather_ttl)) {
+            config->cache.weather_ttl_seconds = json_integer_value(weather_ttl);
+        }
+
+        json_t* geo_ttl = json_object_get(cache, "geo_ttl_seconds");
+        if (geo_ttl && json_is_integer(geo_ttl)) {
+            config->cache.geo_ttl_seconds = json_integer_value(geo_ttl);
+        }
+
+        json_t* cache_enabled = json_object_get(cache, "enabled");
+        if (cache_enabled && json_is_boolean(cache_enabled)) {
+            config->cache.enabled = json_boolean_value(cache_enabled);
+        }
+    }
+
+    /* Parse geocoding section */
+    json_t* geocoding = json_object_get(root, "geocoding");
+    if (geocoding) {
+        json_t* max_results = json_object_get(geocoding, "max_results");
+        if (max_results && json_is_integer(max_results)) {
+            config->geocoding.max_results = json_integer_value(max_results);
+        }
+
+        json_t* language = json_object_get(geocoding, "language");
+        if (language && json_is_string(language)) {
+            strncpy(config->geocoding.language, json_string_value(language),
+                    sizeof(config->geocoding.language) - 1);
+        }
+    }
+
+    /* Parse watchdog section */
+    json_t* watchdog = json_object_get(root, "watchdog");
+    if (watchdog) {
+        json_t* pid_file = json_object_get(watchdog, "pid_file");
+        if (pid_file && json_is_string(pid_file)) {
+            strncpy(config->watchdog.pid_file, json_string_value(pid_file),
+                    sizeof(config->watchdog.pid_file) - 1);
+        }
+
+        json_t* max_restarts = json_object_get(watchdog, "max_restarts");
+        if (max_restarts && json_is_integer(max_restarts)) {
+            config->watchdog.max_restarts = json_integer_value(max_restarts);
+        }
+
+        json_t* restart_window =
+            json_object_get(watchdog, "restart_window_sec");
+        if (restart_window && json_is_integer(restart_window)) {
+            config->watchdog.restart_window_sec =
+                json_integer_value(restart_window);
         }
     }
 
@@ -103,5 +160,11 @@ void config_parser_print(const ServerConfig* config) {
     printf("\nGeocoding:\n");
     printf("  Max Results: %d\n", config->geocoding.max_results);
     printf("  Language: %s\n", config->geocoding.language);
+
+    printf("\nWatchdog:\n");
+    printf("  PID File: %s\n", config->watchdog.pid_file);
+    printf("  Max Restarts: %d\n", config->watchdog.max_restarts);
+    printf("  Restart Window: %d seconds\n",
+           config->watchdog.restart_window_sec);
     printf("===========================\n\n");
 }
