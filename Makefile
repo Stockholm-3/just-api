@@ -11,7 +11,7 @@ INC_DIR     := includes
 
 BUILD_MODE  ?= debug
 BUILD_DIR   := build/$(BUILD_MODE)
-BIN  := $(BUILD_DIR)/just-weather-server
+BIN  := $(BUILD_DIR)/just-server
 
 # ------------------------------------------------------------
 # Build configuration
@@ -56,9 +56,9 @@ OBJ     := $(OBJ_SRC) $(OBJ_LIB)
 # ------------------------------------------------------------
 # Watchdog binary
 # ------------------------------------------------------------
-WATCHDOG_SRC := src/watchdog/jws_watchdog.c
-WATCHDOG_OBJ := $(BUILD_DIR)/src/watchdog/jws_watchdog.o
-WATCHDOG_BIN := $(BUILD_DIR)/jws-watchdog
+WATCHDOG_SRC := src/watchdog/watchdog.c src/logger/logger.c
+WATCHDOG_OBJ := $(BUILD_DIR)/src/watchdog/watchdog.o $(BUILD_DIR)/src/logger/logger.o
+WATCHDOG_BIN := $(BUILD_DIR)/watchdog
 
 # ------------------------------------------------------------
 # Build rules
@@ -73,9 +73,9 @@ watchdog: $(WATCHDOG_BIN)
 
 $(WATCHDOG_BIN): $(WATCHDOG_OBJ)
 	@mkdir -p $(dir $@)
-	@$(CC) $(LDFLAGS) $< -o $@
+	@$(CC) $(LDFLAGS) $(WATCHDOG_OBJ) -o $@
 
-$(WATCHDOG_OBJ): $(WATCHDOG_SRC)
+$(BUILD_DIR)/src/watchdog/%.o: src/watchdog/%.c
 	@echo "Compiling watchdog $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS_SRC) -c $< -o $@
@@ -115,7 +115,7 @@ clean:
 # ------------------------------------------------------------
 .PHONY: start-server
 start-server: $(BIN)
-	@SESSION_NAME=just-weather-server; \
+	@SESSION_NAME=just-server; \
 	if tmux has-session -t $$SESSION_NAME 2>/dev/null; then \
 		echo "Session '$$SESSION_NAME' already exists. Attaching..."; \
 		tmux attach -t $$SESSION_NAME; \
@@ -229,9 +229,13 @@ docs-open:
 # Daemon management
 # ------------------------------------------------------------
 .PHONY: daemon-start
-daemon-start: $(WATCHDOG_BIN) $(BIN)
-	@if [ -f /tmp/jws-watchdog.pid ]; then \
-		PID=$$(cat /tmp/jws-watchdog.pid); \
+daemon-start:
+	@if [ ! -x $(WATCHDOG_BIN) ] || [ ! -x $(BIN) ]; then \
+		echo "Binaries not found, building..."; \
+		$(MAKE) all; \
+	fi
+	@if [ -f /tmp/watchdog.pid ]; then \
+		PID=$$(cat /tmp/watchdog.pid); \
 		if kill -0 $$PID 2>/dev/null; then \
 			echo "Watchdog already running (PID $$PID)"; \
 			exit 1; \
@@ -240,14 +244,14 @@ daemon-start: $(WATCHDOG_BIN) $(BIN)
 	@echo "Starting watchdog daemon..."
 	@$(WATCHDOG_BIN) --server $(BIN)
 	@sleep 1
-	@if [ -f /tmp/jws-watchdog.pid ]; then \
-		echo "Watchdog started (PID $$(cat /tmp/jws-watchdog.pid))"; \
+	@if [ -f /tmp/watchdog.pid ]; then \
+		echo "Watchdog started (PID $$(cat /tmp/watchdog.pid))"; \
 	fi
 
 .PHONY: daemon-stop
 daemon-stop:
-	@if [ -f /tmp/jws-watchdog.pid ]; then \
-		PID=$$(cat /tmp/jws-watchdog.pid); \
+	@if [ -f /tmp/watchdog.pid ]; then \
+		PID=$$(cat /tmp/watchdog.pid); \
 		echo "Stopping watchdog (PID $$PID)..."; \
 		kill $$PID 2>/dev/null || true; \
 		sleep 2; \
@@ -255,7 +259,7 @@ daemon-stop:
 			echo "Force killing..."; \
 			kill -9 $$PID 2>/dev/null || true; \
 		fi; \
-		rm -f /tmp/jws-watchdog.pid; \
+		rm -f /tmp/watchdog.pid; \
 		echo "Stopped."; \
 	else \
 		echo "Watchdog not running."; \
@@ -263,11 +267,11 @@ daemon-stop:
 
 .PHONY: daemon-status
 daemon-status:
-	@if [ -f /tmp/jws-watchdog.pid ]; then \
-		PID=$$(cat /tmp/jws-watchdog.pid); \
+	@if [ -f /tmp/watchdog.pid ]; then \
+		PID=$$(cat /tmp/watchdog.pid); \
 		if kill -0 $$PID 2>/dev/null; then \
 			echo "Watchdog running (PID $$PID)"; \
-			SERVER_PID=$$(pgrep -P $$PID just-weather 2>/dev/null || echo "none"); \
+			SERVER_PID=$$(pgrep -P $$PID just-server 2>/dev/null || echo "none"); \
 			echo "Server PID: $$SERVER_PID"; \
 		else \
 			echo "Watchdog not running (stale PID file)"; \

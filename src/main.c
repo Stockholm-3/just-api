@@ -1,12 +1,17 @@
-#include "cache_utils/cache_cleaner.h"
+#include "logger/logger.h"
 #include "smw.h"
 #include "utils.h"
 #include "weather_server.h"
 
+#include <getopt.h>
 #include <signal.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/resource.h>
 #include <unistd.h>
+
+#define DEFAULT_LOG_DIR "./logs"
+#define DEFAULT_BASE_DIR "."
 
 static volatile sig_atomic_t g_shutdown_requested = 0;
 
@@ -15,50 +20,69 @@ static void handle_shutdown_signal(int signum) {
     g_shutdown_requested = 1;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    const char* log_dir  = DEFAULT_LOG_DIR;
+    const char* base_dir = DEFAULT_BASE_DIR;
+
+    // Parse arguments
+    static struct option long_options[] = {
+        {"log-dir", required_argument, 0, 'l'},
+        {"base-dir", required_argument, 0, 'b'},
+        {0, 0, 0, 0}};
+
+    int opt;
+    while ((opt = getopt_long(argc, argv, "l:b:", long_options, NULL)) != -1) {
+        switch (opt) {
+        case 'l':
+            log_dir = optarg;
+            break;
+        case 'b':
+            base_dir = optarg;
+            break;
+        default:
+            break;
+        }
+    }
+
+    // Change to base directory so relative paths (cache, data) resolve
+    // correctly
+    if (chdir(base_dir) != 0) {
+        fprintf(stderr, "Failed to chdir to base directory: %s\n", base_dir);
+        return 1;
+    }
+
+    // Initialize logger
+    if (logger_init(log_dir, LOG_DEBUG) != 0) {
+        fprintf(stderr, "Failed to initialize logger\n");
+        return 1;
+    }
+
     signal(SIGPIPE, SIG_IGN);
     signal(SIGTERM, handle_shutdown_signal);
     signal(SIGINT, handle_shutdown_signal);
-    printf("[MAIN] Signal handlers configured\n");
+    LOG_INFO("MAIN", "Signal handlers configured");
 
     struct rlimit rlim;
     getrlimit(RLIMIT_NOFILE, &rlim);
     rlim.rlim_cur = 65536;
     setrlimit(RLIMIT_NOFILE, &rlim);
-    printf("[MAIN] FD limit: %lu\n", rlim.rlim_cur);
+    LOG_INFO("MAIN", "FD limit: %lu", rlim.rlim_cur);
 
     smw_init();
-
-    /* Initialize cache cleaner */
-    CacheCleanerConfig cleaner_cfg = {
-        .entries = {{.cache_dir = "./cache/weather_cache", .ttl_seconds = 900},
-                    {.cache_dir = "./cache/geo_cache", .ttl_seconds = 604800}},
-        .entry_count = 2,
-        .verbose     = true};
-
-    CacheCleaner* cache_cleaner = cache_cleaner_create(&cleaner_cfg);
-    if (!cache_cleaner) {
-        printf("[MAIN] Warning: Failed to initialize cache cleaner\n");
-    }
 
     WeatherServer server;
     weather_server_initiate(&server);
 
-    printf("[MAIN] Server started on port 10680 (PID %d)\n", getpid());
+    LOG_INFO("MAIN", "Server started on port 10680 (PID %d)", getpid());
 
     while (!g_shutdown_requested) {
         smw_work(system_monotonic_ms());
     }
 
-    printf("[MAIN] Shutdown signal received, cleaning up...\n");
+    LOG_INFO("MAIN", "Shutdown signal received, cleaning up...");
     weather_server_dispose(&server);
-
-    if (cache_cleaner) {
-        cache_cleaner_destroy(cache_cleaner);
-    }
-
     smw_dispose();
-    printf("[MAIN] Server stopped gracefully\n");
 
+    logger_shutdown();
     return 0;
 }

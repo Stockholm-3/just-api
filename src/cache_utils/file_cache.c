@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <hash_md5.h>
 #include <jansson.h>
+#include <logger/logger.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -116,9 +117,8 @@ FileCacheInstance* file_cache_create(const FileCacheConfig* config) {
 
     /* Create cache directory if it doesn't exist */
     if (mkdir_recursive(cache->cache_dir, 0755) != 0) {
-        fprintf(stderr,
-                "[FILE_CACHE] Warning: Failed to create cache directory: %s\n",
-                cache->cache_dir);
+        LOG_WARN("FILE_CACHE", "Failed to create cache directory: %s",
+                 cache->cache_dir);
     }
 
     return cache;
