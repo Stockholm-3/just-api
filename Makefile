@@ -56,8 +56,8 @@ OBJ     := $(OBJ_SRC) $(OBJ_LIB)
 # ------------------------------------------------------------
 # Watchdog binary
 # ------------------------------------------------------------
-WATCHDOG_SRC := src/watchdog/jws_watchdog.c
-WATCHDOG_OBJ := $(BUILD_DIR)/src/watchdog/jws_watchdog.o
+WATCHDOG_SRC := $(shell find src/watchdog -type f -name '*.c')
+WATCHDOG_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(WATCHDOG_SRC))
 WATCHDOG_BIN := $(BUILD_DIR)/jws-watchdog
 
 # ------------------------------------------------------------
@@ -76,12 +76,6 @@ $(WATCHDOG_BIN): $(WATCHDOG_OBJ) $(OBJ_LIB)
 	@mkdir -p $(dir $@)
 	@echo "Linking watchdog..."
 	@$(CC) $(LDFLAGS) $^ -o $@ $(LIBS)
-
-# Compile watchdog source
-$(WATCHDOG_OBJ): $(WATCHDOG_SRC)
-	@echo "Compiling watchdog $<... [$(BUILD_TYPE)]"
-	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS_SRC) -c $< -o $@
 
 # Link server binary
 $(BIN): $(OBJ)
