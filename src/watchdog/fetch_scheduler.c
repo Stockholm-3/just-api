@@ -1,4 +1,4 @@
-#include "scheduler_service.h"
+#include "fetch_scheduler.h"
 
 #include <scheduler.h>
 #include <stdio.h>
@@ -36,8 +36,8 @@ static void* scheduler_thread(void* arg) {
     return NULL;
 }
 
-int scheduler_service_start(pthread_t*                    thread,
-                            const SchedulerServiceConfig* config) {
+int fetch_scheduler_start(pthread_t*                    thread,
+                          const SchedulerServiceConfig* config) {
 
     SchedulerContext* ctx = malloc(sizeof(*ctx));
     if (!ctx) {
@@ -54,6 +54,6 @@ int scheduler_service_start(pthread_t*                    thread,
     return 0;
 }
 
-int scheduler_service_stop(pthread_t thread) {
+int fetch_scheduler_stop(pthread_t thread) {
     return pthread_join(thread, NULL);
 }

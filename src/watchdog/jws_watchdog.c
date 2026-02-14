@@ -5,10 +5,9 @@
  * Implements exponential backoff for restart attempts.
  */
 
-#include "scheduler_service.h"
 #define _GNU_SOURCE
 
-#include "pthread.h"
+#include "fetch_scheduler.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -283,8 +282,9 @@ int main(int argc, char* argv[]) {
 
     SchedulerServiceConfig sched_cfg = {.shutdown_flag = &g_shutdown_requested};
 
-    if (scheduler_service_start(&scheduler_thread, &sched_cfg) != 0) {
-        perror("pthread");
+    if (fetch_scheduler_start(&scheduler_thread, &sched_cfg) != 0) {
+        perror("fetch_scheduler_start");
+        exit(EXIT_FAILURE);
     }
 
     while (!g_shutdown_requested) {
@@ -315,8 +315,9 @@ int main(int argc, char* argv[]) {
         waitpid(g_state.server_pid, &status, 0);
     }
 
-    g_shutdown_requested = 1;
-    pthread_join(scheduler_thread, NULL);
+    if (fetch_scheduler_stop(scheduler_thread) != 0) {
+        perror("pthread_join");
+    }
 
     remove_pid_file(config.pid_file);
 
