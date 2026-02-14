@@ -1,3 +1,4 @@
+#include "config/config_parser.h"
 #include "logger/logger.h"
 #include "smw.h"
 #include "utils.h"
@@ -62,9 +63,25 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, handle_shutdown_signal);
     LOG_INFO("MAIN", "Signal handlers configured");
 
+    /* Load configuration */
+    ServerConfig config;
+    const char*  config_file = "config.json";
+
+    if (config_parser_load(config_file, &config) != 0) {
+        printf("[MAIN] Using default configuration\n");
+        config_set_defaults(&config);
+    }
+
+    if (config_parser_validate(&config) != 0) {
+        fprintf(stderr, "[MAIN] Invalid configuration\n");
+        return 1;
+    }
+
+    config_parser_print(&config);
+
     struct rlimit rlim;
     getrlimit(RLIMIT_NOFILE, &rlim);
-    rlim.rlim_cur = 65536;
+    rlim.rlim_cur = config.max_connections;
     setrlimit(RLIMIT_NOFILE, &rlim);
     LOG_INFO("MAIN", "FD limit: %lu", rlim.rlim_cur);
 
