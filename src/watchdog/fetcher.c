@@ -21,13 +21,16 @@ typedef struct {
     char* response;
 } SyncHttpContext;
 
-/* =========================
-   CityPrice Helpers
-   ========================= */
+/* One entry from JSON file */
+typedef struct {
+    char* city;
+    char* price;
+} CityPrice;
 
 void free_city_price_list(CityPrice* list, size_t count) {
-    if (!list)
+    if (!list) {
         return;
+    }
     for (size_t i = 0; i < count; i++) {
         free(list[i].city);
         free(list[i].price);
@@ -61,13 +64,15 @@ CityPrice* load_city_price_file(const char* filename, size_t* count) {
     size_t out = 0;
     for (size_t i = 0; i < n; i++) {
         json_t* entry = json_array_get(root, i);
-        if (!json_is_object(entry))
+        if (!json_is_object(entry)) {
             continue;
+        }
 
         json_t* city  = json_object_get(entry, "City");
         json_t* price = json_object_get(entry, "Price");
-        if (!json_is_string(city) || !json_is_string(price))
+        if (!json_is_string(city) || !json_is_string(price)) {
             continue;
+        }
 
         list[out].city  = strdup(json_string_value(city));
         list[out].price = strdup(json_string_value(price));
@@ -84,10 +89,6 @@ CityPrice* load_city_price_file(const char* filename, size_t* count) {
     *count = out;
     return list;
 }
-
-/* =========================
-   HTTP Fetch Helpers
-   ========================= */
 
 static void sync_http_callback(const char* event, const char* response,
                                void* context) {
@@ -196,9 +197,6 @@ int fetch_all_price_groups_sync(FileCacheInstance* cache,
         return -1;
     }
 
-    /* -----------------------------
-       Save merged JSON into cache
-       ----------------------------- */
     if (file_cache_save_json(cache, cache_key, merged) != FILE_CACHE_OK) {
         fprintf(stderr, "Failed to save merged JSON to cache key '%s'\n",
                 cache_key);
@@ -206,15 +204,12 @@ int fetch_all_price_groups_sync(FileCacheInstance* cache,
         return -1;
     }
 
-    /* Optional: acquire lock only if needed for later concurrent access */
     FileCacheLock* lock = NULL;
     if (file_cache_lock(cache, cache_key, FILE_CACHE_LOCK_EXCLUSIVE, &lock) ==
         FILE_CACHE_OK) {
-        /* Do something with locked cache if needed */
         file_cache_unlock(lock);
     }
 
-    /* Print file path for debugging */
     char path[FILE_CACHE_MAX_PATH_LENGTH];
     if (file_cache_get_filepath(cache, cache_key, path, sizeof(path)) ==
         FILE_CACHE_OK) {

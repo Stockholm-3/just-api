@@ -7,12 +7,6 @@
 #define CONFIG "registered_cities.json"
 #define CACHE_PATH "fetch/"
 
-/* One entry from JSON file */
-typedef struct {
-    char* city;
-    char* price;
-} CityPrice;
-
 int fetch_all_price_groups_sync(FileCacheInstance* cache,
                                 const char* cache_key_prefix, const char* port,
                                 uint64_t timeout);
