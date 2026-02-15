@@ -11,7 +11,7 @@ static void hourly_fetch(void) { printf("One hour passed\n"); }
 
 static void daily_fetch(void) {
     printf("13:00 reached\n");
-    FileCacheConfig cfg = {.cache_dir   = "./compute_input",
+    FileCacheConfig cfg = {.cache_dir   = "./cache/compute_input",
                            .ttl_seconds = 60 * 60 * 24, // 1 day
                            .enabled     = true};
 
