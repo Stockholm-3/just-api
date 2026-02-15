@@ -24,6 +24,10 @@ void config_set_defaults(ServerConfig* config) {
             sizeof(config->watchdog.pid_file) - 1);
     config->watchdog.max_restarts       = 10;
     config->watchdog.restart_window_sec = 60;
+
+    /* Thread pool defaults */
+    config->thread_pool.num_workers = 4;
+    config->thread_pool.max_pending = 256;
 }
 
 int config_parser_load(const char* filepath, ServerConfig* config) {
@@ -125,6 +129,20 @@ int config_parser_load(const char* filepath, ServerConfig* config) {
         }
     }
 
+    /* Parse thread_pool section */
+    json_t* thread_pool = json_object_get(root, "thread_pool");
+    if (thread_pool) {
+        json_t* num_workers = json_object_get(thread_pool, "num_workers");
+        if (num_workers && json_is_integer(num_workers)) {
+            config->thread_pool.num_workers = json_integer_value(num_workers);
+        }
+
+        json_t* max_pending = json_object_get(thread_pool, "max_pending");
+        if (max_pending && json_is_integer(max_pending)) {
+            config->thread_pool.max_pending = json_integer_value(max_pending);
+        }
+    }
+
     json_decref(root);
     printf("[CONFIG] Configuration loaded from %s\n", filepath);
     return 0;
@@ -141,6 +159,17 @@ int config_parser_validate(const ServerConfig* config) {
                 config->cache.weather_ttl_seconds);
         return -1;
     }
+
+    if (config->thread_pool.num_workers <= 0) {
+        fprintf(stderr, "[CONFIG] Thread pool num_workers must be > 0\n");
+        return -1;
+    }
+
+    if (config->thread_pool.max_pending < 0) {
+        fprintf(stderr, "[CONFIG] Thread pool max_pending must be >= 0\n");
+        return -1;
+    }
+
     return 0;
 }
 
@@ -166,5 +195,9 @@ void config_parser_print(const ServerConfig* config) {
     printf("  Max Restarts: %d\n", config->watchdog.max_restarts);
     printf("  Restart Window: %d seconds\n",
            config->watchdog.restart_window_sec);
+    printf("\nThread Pool:\n");
+    printf("  Workers: %d\n", config->thread_pool.num_workers);
+    printf("  Max Pending: %d%s\n", config->thread_pool.max_pending,
+           config->thread_pool.max_pending == 0 ? " (unlimited)" : "");
     printf("===========================\n\n");
 }

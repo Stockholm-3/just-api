@@ -105,7 +105,7 @@ test_endpoint "GET"  "/v1/current?lat=59.33&lon=18.07"      200 '"success"'
 test_endpoint "GET"  "/v1/hourly?city=Stockholm&hours=3"    200 '"success"'
 test_endpoint "GET"  "/v1/forecast?lat=59.33&lon=18.07"     200 ""
 test_endpoint "GET"  "/v1/cities?query=Stock"               200 ""
-test_endpoint "GET"  "/v1/elpris?zone=SE3"                  200 ""
+test_endpoint "GET"  "/v1/elpris?price=SE3"                 200 ""
 test_endpoint "GET"  "/nonexistent"                         404 ""
 
 echo "========================="
