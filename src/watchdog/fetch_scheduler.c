@@ -7,9 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static void hourly_fetch(void) {
-    printf("One hour passed\n");
+static void hourly_fetch(void) { printf("One hour passed\n"); }
 
+static void daily_fetch(void) {
+    printf("13:00 reached\n");
     FileCacheConfig cfg = {.cache_dir   = "./compute_input",
                            .ttl_seconds = 60 * 60 * 24, // 1 day
                            .enabled     = true};
@@ -25,10 +26,6 @@ static void hourly_fetch(void) {
     fetch_all_price_groups_sync(cache, "elpris", "10680", 10000);
 
     file_cache_destroy(cache);
-}
-
-static void daily_fetch(void) {
-    printf("13:00 reached\n");
     // fetch elpris
 }
 
@@ -40,9 +37,9 @@ static void* scheduler_thread(void* arg) {
     SchedulerContext* ctx = arg;
 
     SchedulerTimer* hourly =
-        create_interval_timer((uint64_t)(1000), hourly_fetch);
+        create_interval_timer((uint64_t)(1000 * 60 * 60), hourly_fetch);
 
-    SchedulerTimer* daily = create_daily_timer(13, 0, 0, daily_fetch);
+    SchedulerTimer* daily = create_daily_timer(13, 5, 0, daily_fetch);
 
     SchedulerTimer* timers[] = {hourly, daily};
 
