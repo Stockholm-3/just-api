@@ -56,7 +56,7 @@ OBJ     := $(OBJ_SRC) $(OBJ_LIB)
 # ------------------------------------------------------------
 # Watchdog binary
 # ------------------------------------------------------------
-WATCHDOG_SRC := $(shell find src/watchdog -type f -name '*.c')
+WATCHDOG_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c')
 WATCHDOG_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(WATCHDOG_SRC))
 WATCHDOG_BIN := $(BUILD_DIR)/jws-watchdog
 

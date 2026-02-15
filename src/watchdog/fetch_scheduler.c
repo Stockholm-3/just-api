@@ -10,13 +10,25 @@
 static void hourly_fetch(void) {
     printf("One hour passed\n");
 
-    fetch_all_price_groups_sync("./compute_input/elpris.json", "10680", 10000);
-    // fetch forecast
+    FileCacheConfig cfg = {.cache_dir   = "./compute_input",
+                           .ttl_seconds = 60 * 60 * 24, // 1 day
+                           .enabled     = true};
+
+    FileCacheInstance* cache = file_cache_create(&cfg);
+
+    if (!cache) {
+        printf("Failed to create cache\n");
+        return;
+    }
+
+    // Only call fetch if cache was created successfully
+    fetch_all_price_groups_sync(cache, "elpris", "10680", 10000);
+
+    file_cache_destroy(cache);
 }
 
 static void daily_fetch(void) {
     printf("13:00 reached\n");
-    fetch_all_price_groups_sync("compute_input/", "10680", 10000);
     // fetch elpris
 }
 
