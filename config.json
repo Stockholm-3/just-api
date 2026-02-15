@@ -1,0 +1,22 @@
+{
+  "server": {
+    "port": 10680,
+    "max_connections": 1024,
+    "daemon_mode": false
+  },
+  "cache": {
+    "directory": "./cache",
+    "weather_ttl_seconds": 900,
+    "geo_ttl_seconds": 604800,
+    "enabled": true
+  },
+  "geocoding": {
+    "max_results": 10,
+    "language": "en"
+  },
+  "watchdog": {
+    "pid_file": "tmp/jws-watchdog.pid",
+    "max_restarts": 10,
+    "restart_window_sec": 60
+  }
+}
