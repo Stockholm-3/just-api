@@ -5,7 +5,9 @@
  * Implements exponential backoff for restart attempts.
  */
 
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+#    define _GNU_SOURCE
+#endif
 
 #include "../logger/logger.h"
 #include "fetch_scheduler.h"
