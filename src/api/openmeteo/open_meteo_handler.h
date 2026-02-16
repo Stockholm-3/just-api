@@ -143,6 +143,31 @@ int open_meteo_handler_hourly_async(HTTPServerConnection* conn,
                                     const char*           query_string);
 
 /**
+ * @brief Handle GET /v1/minutely endpoint request.
+ *
+ * Returns 15-minute interval weather forecast for specified coordinates.
+ *
+ * @param[in]  query_string  Query parameters (lat, lon, hours).
+ * @param[out] response_json Allocated JSON response (caller frees).
+ * @param[out] status_code   HTTP status code.
+ *
+ * @return 0 on success, -1 on error.
+ */
+int open_meteo_handler_minutely(const char* query_string, char** response_json,
+                                int* status_code);
+
+/**
+ * @brief Handle GET /v1/minutely endpoint request (async version).
+ *
+ * @param[in] conn         HTTP server connection.
+ * @param[in] query_string Query parameters (lat, lon, hours).
+ *
+ * @return 0 on success, -1 on error.
+ */
+int open_meteo_handler_minutely_async(HTTPServerConnection* conn,
+                                      const char*           query_string);
+
+/**
  * @brief Clean up the Open-Meteo handler module.
  *
  * Releases all resources allocated by the handler, including
