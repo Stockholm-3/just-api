@@ -1,16 +1,19 @@
 #include "fetch_scheduler.h"
 
 #include "fetcher.h"
+#include "logger/logger.h"
 
 #include <scheduler.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
 
-static void hourly_fetch(void) { printf("One hour passed\n"); }
+static void fetch_weather(void) {
+    LOG_INFO("FETCH_SCHEDULER", "Fetching Weather for compute...");
+}
 
-static void daily_fetch(void) {
-    printf("13:00 reached\n");
+static void fetch_elpris(void) {
+
+    LOG_INFO("FETCH_SCHEDULER", "Fetching Elpris for compute...");
     FileCacheConfig cfg = {.cache_dir   = "./cache/compute_input",
                            .ttl_seconds = 60 * 60 * 24, // 1 day
                            .enabled     = true};
@@ -18,7 +21,7 @@ static void daily_fetch(void) {
     FileCacheInstance* cache = file_cache_create(&cfg);
 
     if (!cache) {
-        printf("Failed to create cache\n");
+        LOG_ERROR("FETCH_SCHEDULER", "failed to create cache");
         return;
     }
 
@@ -26,7 +29,6 @@ static void daily_fetch(void) {
     fetch_all_price_groups_sync(cache, "elpris", "10680", 10000);
 
     file_cache_destroy(cache);
-    // fetch elpris
 }
 
 typedef struct {
@@ -36,16 +38,18 @@ typedef struct {
 static void* scheduler_thread(void* arg) {
     SchedulerContext* ctx = arg;
 
-    SchedulerTimer* hourly =
-        create_interval_timer((uint64_t)(1000 * 60 * 60), hourly_fetch);
+    SchedulerTimer* quarter_hour =
+        create_aligned_timer_utc(15ULL * 60 * 1000, // 15 minutes in ms
+                                 60ULL * 1000,      // offset = 00:01 UTC
+                                 fetch_weather);
 
-    SchedulerTimer* daily = create_daily_timer(13, 5, 0, daily_fetch);
+    SchedulerTimer* daily = create_daily_timer(13, 5, 0, fetch_elpris);
 
-    SchedulerTimer* timers[] = {hourly, daily};
+    SchedulerTimer* timers[] = {quarter_hour, daily};
 
     run_scheduler(timers, 2, ctx->shutdown);
 
-    destroy_timer(hourly);
+    destroy_timer(quarter_hour);
     destroy_timer(daily);
 
     free(ctx);
@@ -54,6 +58,8 @@ static void* scheduler_thread(void* arg) {
 
 int fetch_scheduler_start(pthread_t*                    thread,
                           const SchedulerServiceConfig* config) {
+    // Fetch hourly on startup
+    fetch_weather();
 
     SchedulerContext* ctx = malloc(sizeof(*ctx));
     if (!ctx) {
