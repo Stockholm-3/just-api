@@ -398,6 +398,85 @@ int city_registry_initiate(const char* filepath, const char* city,
     return 0;
 }
 
+CityLoadResult city_registry_load_all(const char* filepath) {
+    CityLoadResult result = {NULL, 0};
+
+    if (!filepath) {
+        return result;
+    }
+
+    FILE* fp = fopen(filepath, "r");
+    if (!fp) {
+        // A missing file is not an error; return an empty list
+        if (errno != ENOENT) {
+            LOG_WARN("CITY_REG",
+                     "Failed to open registry for reading: %s (errno %d)",
+                     filepath, errno);
+        }
+        return result;
+    }
+
+    if (flock(fileno(fp), LOCK_SH) != 0) {
+        LOG_WARN("CITY_REG", "Failed to acquire shared lock (errno %d)", errno);
+        fclose(fp);
+        return result;
+    }
+
+    CityEntry* entries = malloc(sizeof(CityEntry) * MAX_REGISTERED_CITIES);
+    if (!entries) {
+        LOG_WARN("CITY_REG", "Allocation failed for city load buffer");
+        flock(fileno(fp), LOCK_UN);
+        fclose(fp);
+        return result;
+    }
+
+    time_t now   = time(NULL);
+    int    count = 0;
+    char   line[512];
+
+    while (fgets(line, sizeof(line), fp) && count < MAX_REGISTERED_CITIES) {
+        char* saveptr = NULL;
+
+        char* token = strtok_r(line, ",", &saveptr);
+        if (!token || token[0] == '\0') {
+            continue;
+        }
+
+        CityEntry entry = {0};
+
+        strncpy(entry.city, token, sizeof(entry.city));
+        entry.city[sizeof(entry.city) - 1] = '\0';
+
+        // price (consumed from CSV but not stored in result)
+        token = strtok_r(NULL, ",", &saveptr);
+        strncpy(entry.price, token ? token : "", sizeof(entry.price));
+        entry.price[sizeof(entry.price) - 1] = '\0';
+
+        token     = strtok_r(NULL, ",", &saveptr);
+        entry.lat = token ? atof(token) : 0.0;
+
+        token     = strtok_r(NULL, ",", &saveptr);
+        entry.lon = token ? atof(token) : 0.0;
+
+        token               = strtok_r(NULL, ",", &saveptr);
+        entry.last_accessed = token ? (time_t)atoll(token) : now;
+
+        // Skip expired entries; do not surface them to the caller
+        if (now - entry.last_accessed > (time_t)CITY_TTL_SECONDS) {
+            continue;
+        }
+
+        entries[count++] = entry;
+    }
+
+    flock(fileno(fp), LOCK_UN);
+    fclose(fp);
+
+    result.entries = entries;
+    result.count   = count;
+    return result;
+}
+
 void city_registry_dispose(CityRegistry* reg) {
     if (!reg) {
         return;

@@ -175,6 +175,44 @@ typedef struct {
 // ---- Public API -------------------------------------------------------------
 
 /**
+ * @brief Result of a city_registry_load_all() call.
+ *
+ * On success, @p entries points to a heap-allocated array of @p count
+ * @ref CityEntry values. The caller is responsible for freeing @p entries
+ * with free() when done. On failure both fields are zero-initialised.
+ */
+typedef struct {
+    CityEntry* entries; /**< Heap-allocated array of loaded entries, or NULL on
+                           failure. */
+    int count;          /**< Number of valid entries in @p entries. */
+} CityLoadResult;
+
+/**
+ * @brief Synchronously load all non-expired cities from the registry CSV.
+ *
+ * Opens the file, acquires a shared lock, reads every row, discards entries
+ * that have exceeded @ref CITY_TTL_SECONDS, and returns the survivors in a
+ * heap-allocated array. The lock is always released before returning,
+ * including on every error path.
+ *
+ * This function blocks the calling thread for the duration of the file I/O.
+ * It is intended for startup or administrative paths where blocking is
+ * acceptable. Do not call it from an SMW task work function.
+ *
+ * @param filepath  Path to the CSV registry file. Pass @ref CITY_REGISTRY_FILE
+ *                  for the default location. Must not be NULL.
+ *
+ * @return A @ref CityLoadResult whose @p entries array and @p count are
+ *         populated on success. On any failure (lock error, allocation error)
+ *         returns a zero-initialised struct with @p entries NULL and
+ *         @p count 0. A missing file is not treated as an error; an empty
+ *         result is returned instead.
+ *
+ * @note The caller must free the returned @p entries pointer with free().
+ */
+CityLoadResult city_registry_load_all(const char* filepath);
+
+/**
  * @brief Allocate and start an async city-registry operation.
  *
  * Creates a heap-allocated @ref CityRegistry, registers an SMW task, and
