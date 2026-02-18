@@ -34,6 +34,8 @@ Route g_routes[] = {
     {"GET", "/v1/hourly", handle_hourly_weather},
     {"GET", "/v1/minutely", handle_minutely_weather},
     {"GET", "/v1/forecast", handle_forecast_weather},
+    {"GET", "/v1/forecast/minutely", handle_minutely_weather},
+    {"GET", "/v1/forecast/hourly", handle_hourly_weather},
     {"GET", "/v1/cities", handle_city_search},
     {"GET", "/v1/elpris", handle_elpris_route},
 };
