@@ -13,7 +13,7 @@
 
 #define MAX_REGISTERED_CITIES 200
 #define REGISTERED_CITIES_FILE "cities.csv"
-#define CITY_TTL_SECONDS (2 * 24 * 3600) // 2 days
+#define CITY_TTL_SECONDS (2ULL * 24 * 3600) // 2 days
 
 static const char* ALLOWED_PRICE_VALUES[] = {"SE1", "SE2", "SE3", "SE4"};
 #define NUM_ALLOWED_PRICES                                                     \
@@ -86,7 +86,6 @@ static CityRegisterStatus register_city(FileCacheInstance* cache,
     int       exists = 0;
     time_t    now    = time(NULL);
 
-    rewind(fp);
     char line[512];
     while (fgets(line, sizeof(line), fp) && count < MAX_REGISTERED_CITIES) {
         char* token;
@@ -153,13 +152,31 @@ static CityRegisterStatus register_city(FileCacheInstance* cache,
         }
     }
 
-    /* Rewrite file with updated entries */
-    freopen(NULL, "w", fp);
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        LOG_WARN("PLAN", "Failed to seek to start of CSV file");
+        flock(fileno(fp), LOCK_UN);
+        fclose(fp);
+        return status;
+    }
+
+    if (ftruncate(fileno(fp), 0) != 0) {
+        LOG_WARN("PLAN", "Failed to truncate CSV file");
+        flock(fileno(fp), LOCK_UN);
+        fclose(fp);
+        return status;
+    }
+
+    /* Write updated cities */
     for (int i = 0; i < count; i++) {
         if (cities[i].city[0] != '\0') {
-            fprintf(fp, "%s,%s,%.6f,%.6f,%ld\n", cities[i].city,
-                    cities[i].price, cities[i].lat, cities[i].lon,
-                    (long)cities[i].last_accessed);
+            if (fprintf(fp, "%s,%s,%.6f,%.6f,%ld\n", cities[i].city,
+                        cities[i].price, cities[i].lat, cities[i].lon,
+                        (long)cities[i].last_accessed) < 0) {
+                LOG_WARN("PLAN", "Failed to write city: %s", cities[i].city);
+                flock(fileno(fp), LOCK_UN);
+                fclose(fp);
+                return status;
+            }
         }
     }
 
