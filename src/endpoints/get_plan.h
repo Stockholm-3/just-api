@@ -7,10 +7,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
+#include <time.h>
 #include <url_query_parser.h>
 
 #define MAX_REGISTERED_CITIES 200
 #define REGISTERED_CITIES_FILE "cities.csv"
+#define CITY_TTL_SECONDS (2 * 24 * 3600) // 2 days
 
 static const char* ALLOWED_PRICE_VALUES[] = {"SE1", "SE2", "SE3", "SE4"};
 #define NUM_ALLOWED_PRICES                                                     \
@@ -31,10 +34,9 @@ static int is_allowed_price(const char* value) {
 static FileCacheInstance* get_plan_cache(void) {
     static FileCacheInstance* cache = NULL;
     if (!cache) {
-        FileCacheConfig config = {.cache_dir = "./cache/registered_cities",
-                                  .ttl_seconds =
-                                      3600, /* not really used for CSV */
-                                  .enabled = true};
+        FileCacheConfig config = {.cache_dir   = "./cache/registered_cities",
+                                  .ttl_seconds = 3600,
+                                  .enabled     = true};
         cache                  = file_cache_create(&config);
     }
     return cache;
@@ -56,58 +58,109 @@ static CityRegisterStatus register_city(FileCacheInstance* cache,
         return CITY_LIMIT_REACHED;
     }
 
-    FILE* fp = fopen(filepath, "r+"); /* open for reading/writing */
+    FILE* fp = fopen(filepath, "r+");
     if (!fp) {
-        /* File doesn't exist yet, create */
-        fp = fopen(filepath, "w+");
-        if (!fp) {
-            LOG_WARN("PLAN", "Failed to create CSV file");
-            return CITY_LIMIT_REACHED;
-        }
+        fp = fopen(filepath, "w+"); // create if missing
+    }
+    if (!fp) {
+        LOG_WARN("PLAN", "Failed to open CSV file");
+        return CITY_LIMIT_REACHED;
     }
 
-    /* Acquire exclusive lock */
     if (flock(fileno(fp), LOCK_EX) != 0) {
         LOG_WARN("PLAN", "Failed to lock CSV file");
         fclose(fp);
         return CITY_LIMIT_REACHED;
     }
 
-    /* Read existing cities */
-    char line[512];
-    char cities[MAX_REGISTERED_CITIES][256];
-    int  count  = 0;
-    int  exists = 0;
+    /* Read all entries into memory */
+    typedef struct {
+        char   city[256];
+        char   price[16];
+        double lat, lon;
+        time_t last_accessed;
+    } CityEntry;
+
+    CityEntry cities[MAX_REGISTERED_CITIES];
+    int       count  = 0;
+    int       exists = 0;
+    time_t    now    = time(NULL);
 
     rewind(fp);
-
+    char line[512];
     while (fgets(line, sizeof(line), fp) && count < MAX_REGISTERED_CITIES) {
         char* token;
         char* saveptr = NULL;
 
         token = strtok_r(line, ",", &saveptr);
-        if (token) {
-            strncpy(cities[count], token, sizeof(cities[count]));
-            cities[count][sizeof(cities[count]) - 1] = '\0';
-
-            if (strcmp(cities[count], city) == 0) {
-                exists = 1;
-            }
-
-            count++;
+        if (!token) {
+            continue;
         }
+        strncpy(cities[count].city, token, sizeof(cities[count].city));
+        cities[count].city[sizeof(cities[count].city) - 1] = '\0';
+
+        token = strtok_r(NULL, ",", &saveptr);
+        strncpy(cities[count].price, token ? token : "",
+                sizeof(cities[count].price));
+        cities[count].price[sizeof(cities[count].price) - 1] = '\0';
+
+        token             = strtok_r(NULL, ",", &saveptr);
+        cities[count].lat = token ? atof(token) : 0.0;
+
+        token             = strtok_r(NULL, ",", &saveptr);
+        cities[count].lon = token ? atof(token) : 0.0;
+
+        token                       = strtok_r(NULL, ",", &saveptr);
+        cities[count].last_accessed = token ? (time_t)atoll(token) : now;
+
+        if (strcmp(cities[count].city, city) == 0) {
+            exists                      = 1;
+            cities[count].last_accessed = now; // update timestamp
+        }
+
+        /* Remove expired cities immediately */
+        if (now - cities[count].last_accessed > CITY_TTL_SECONDS) {
+            cities[count].city[0] = '\0'; // mark deleted
+        }
+
+        count++;
     }
 
     CityRegisterStatus status = CITY_ADDED;
 
     if (exists) {
         status = CITY_EXISTS;
-    } else if (count >= MAX_REGISTERED_CITIES) {
-        status = CITY_LIMIT_REACHED;
     } else {
-        /* Append new city */
-        fseek(fp, 0, SEEK_END);
-        fprintf(fp, "%s,%s,%.6f,%.6f\n", city, price, lat, lon);
+        /* Check remaining valid entries count */
+        int valid_count = 0;
+        for (int i = 0; i < count; i++) {
+            if (cities[i].city[0] != '\0') {
+                valid_count++;
+            }
+        }
+
+        if (valid_count >= MAX_REGISTERED_CITIES) {
+            status = CITY_LIMIT_REACHED;
+        } else {
+            /* Add new city */
+            strncpy(cities[count].city, city, sizeof(cities[count].city));
+            strncpy(cities[count].price, price, sizeof(cities[count].price));
+            cities[count].lat           = lat;
+            cities[count].lon           = lon;
+            cities[count].last_accessed = now;
+            count++;
+            status = CITY_ADDED;
+        }
+    }
+
+    /* Rewrite file with updated entries */
+    freopen(NULL, "w", fp);
+    for (int i = 0; i < count; i++) {
+        if (cities[i].city[0] != '\0') {
+            fprintf(fp, "%s,%s,%.6f,%.6f,%ld\n", cities[i].city,
+                    cities[i].price, cities[i].lat, cities[i].lon,
+                    (long)cities[i].last_accessed);
+        }
     }
 
     flock(fileno(fp), LOCK_UN);
