@@ -174,6 +174,7 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
         return send_json_error(conn, 400, "Missing query parameters");
     }
 
+    /* Parse query parameters */
     UrlQueryMap map;
     if (url_query_parse(query, &map) != 0) {
         return send_json_error(conn, 400, "Invalid query parameters");
@@ -193,6 +194,7 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
             "Invalid price parameter; must be SE1, SE2, SE3, or SE4");
     }
 
+    /* Lookup coordinates */
     Coordinates coords =
         get_city_coordinates("data/swedish_cities_locations.csv", city);
 
@@ -202,10 +204,12 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
         return send_json_error(conn, 400, err);
     }
 
+    /* Register city or update last_accessed timestamp */
     FileCacheInstance* cache = get_plan_cache();
     CityRegisterStatus status =
         register_city(cache, city, price, coords.lat, coords.lon);
 
+    /* Build JSON response */
     char response[1024];
 
     const char* status_msg = NULL;
@@ -214,13 +218,14 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
         status_msg = "City has been added";
         break;
     case CITY_EXISTS:
-        status_msg = "City already exists";
+        status_msg = "City already exists (timestamp updated)";
         break;
     case CITY_LIMIT_REACHED:
         status_msg = "City not added; maximum limit reached";
         break;
     }
 
+    // TODO:Fetch energy plan instead
     int written = snprintf(response, sizeof(response),
                            "{"
                            " \"city\": \"%s\","
