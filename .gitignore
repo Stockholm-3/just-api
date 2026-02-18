@@ -1,12 +1,11 @@
-build/
-lib/jansson-2.13.1
-weather_cache.json
-.cache/
-cache/
-logs/
+/build/
+/lib/jansson-2.13.1
+/weather_cache.json
+/.cache/
+/cache/
 compile_commands.json
-cities/
-documentation/
+/cities/
+/documentation/
 logs/
 /energy_plan/
 
