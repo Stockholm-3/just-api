@@ -184,6 +184,19 @@ int weather_location_handler_hourly_by_city_async(HTTPServerConnection* conn,
                                                   const char* query_string);
 
 /**
+ * @brief Handle minutely weather request by city name (async version).
+ *
+ * Combines geocoding with 15-minute interval weather forecast.
+ *
+ * @param[in] conn         HTTP server connection.
+ * @param[in] query_string URL query parameters (city, country, region, hours).
+ *
+ * @return 0 on success, -1 on error.
+ */
+int weather_location_handler_minutely_by_city_async(HTTPServerConnection* conn,
+                                                    const char* query_string);
+
+/**
  * @brief Clean up the weather location handler.
  *
  * Releases all resources allocated by the handler and its dependencies:

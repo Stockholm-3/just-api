@@ -56,9 +56,9 @@ OBJ     := $(OBJ_SRC) $(OBJ_LIB)
 # ------------------------------------------------------------
 # Watchdog binary
 # ------------------------------------------------------------
-WATCHDOG_SRC := src/watchdog/watchdog.c src/logger/logger.c
-WATCHDOG_OBJ := $(BUILD_DIR)/src/watchdog/watchdog.o $(BUILD_DIR)/src/logger/logger.o
-WATCHDOG_BIN := $(BUILD_DIR)/watchdog
+WATCHDOG_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c')
+WATCHDOG_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(WATCHDOG_SRC))
+WATCHDOG_BIN := $(BUILD_DIR)/jws-watchdog
 
 # ------------------------------------------------------------
 # Build rules
@@ -71,14 +71,11 @@ all: $(BIN) $(WATCHDOG_BIN)
 watchdog: $(WATCHDOG_BIN)
 	@echo "Watchdog build complete. [$(BUILD_TYPE)]"
 
-$(WATCHDOG_BIN): $(WATCHDOG_OBJ)
+# Build watchdog binary
+$(WATCHDOG_BIN): $(WATCHDOG_OBJ) $(OBJ_LIB)
 	@mkdir -p $(dir $@)
-	@$(CC) $(LDFLAGS) $(WATCHDOG_OBJ) -o $@
-
-$(BUILD_DIR)/src/watchdog/%.o: src/watchdog/%.c
-	@echo "Compiling watchdog $<... [$(BUILD_TYPE)]"
-	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS_SRC) -c $< -o $@
+	@echo "Linking watchdog..."
+	@$(CC) $(LDFLAGS) $^ -o $@ $(LIBS)
 
 # Link server binary
 $(BIN): $(OBJ)
@@ -282,6 +279,15 @@ daemon-status:
 
 .PHONY: daemon-restart
 daemon-restart: stop-daemon start-daemon
+
+# ------------------------------------------------------------
+# Run watchdog in foreground (for debugging)
+# ------------------------------------------------------------
+
+.PHONY: watchdog-foreground
+watchdog-foreground: $(WATCHDOG_BIN) $(BIN)
+	@echo "Running watchdog in foreground..."
+	@$(WATCHDOG_BIN) --server $(BIN) --foreground
 
 # Client standalone build
 .PHONY: run-client

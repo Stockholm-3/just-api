@@ -144,19 +144,6 @@ static void http_fetch_async_callback(const char* event, const char* response,
                                    ctx->location->longitude);
             if (parse_result == 0) {
                 status = 0;
-
-                /* Save to cache if enabled */
-                if (g_config.use_cache && ctx->cache_key) {
-                    json_error_t error;
-                    json_t*      json =
-                        json_loadb(response, strlen(response), 0, &error);
-                    if (json) {
-                        file_cache_save_json(g_weather_cache, ctx->cache_key,
-                                             json);
-                        json_decref(json);
-                    }
-                }
-
                 LOG_INFO("METEO", "Successfully fetched weather data");
             } else {
                 LOG_ERROR("METEO", "Failed to parse weather data");
@@ -233,44 +220,10 @@ int open_meteo_api_get_current_async(Location*          location,
         return -1;
     }
 
-    /* Generate cache key from coordinates */
-    char key_input[256];
-    snprintf(key_input, sizeof(key_input), "weather_%.6f_%.6f",
-             location->latitude, location->longitude);
-
-    char cache_key[FILE_CACHE_KEY_LENGTH];
-    if (file_cache_generate_key(g_weather_cache, key_input, cache_key,
-                                sizeof(cache_key)) != FILE_CACHE_OK) {
-        LOG_ERROR("METEO", "Failed to generate cache key");
-        return -2;
-    }
-
-    /* Check cache */
-    if (g_config.use_cache && file_cache_is_valid(g_weather_cache, cache_key)) {
-        LOG_DEBUG("METEO", "Cache HIT");
-
-        json_t* cached_json = NULL;
-        if (file_cache_load_json(g_weather_cache, cache_key,
-                                 (void**)&cached_json) == FILE_CACHE_OK) {
-            WeatherData* data   = NULL;
-            int          result = load_weather_from_json(cached_json, &data);
-            json_decref(cached_json);
-
-            if (result == 0) {
-                /* Invoke callback immediately with cached data */
-                callback(0, data, user_context);
-                return 0;
-            }
-        }
-
-        LOG_ERROR("METEO", "Cache load failed");
-    } else {
-        LOG_DEBUG("METEO", "Cache MISS");
-    }
+    /* Caching is handled at the handler level (open_meteo_handler.c) */
 
     /* Fetch from API asynchronously */
-    return fetch_weather_from_api_async(location, callback, user_context,
-                                        cache_key);
+    return fetch_weather_from_api_async(location, callback, user_context, NULL);
 }
 
 int open_meteo_api_get_current(Location* location, WeatherData** data) {

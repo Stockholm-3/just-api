@@ -5,15 +5,20 @@
  * Implements exponential backoff for restart attempts.
  */
 
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+#    define _GNU_SOURCE
+#endif
 
 #include "../logger/logger.h"
+#include "fetch_scheduler.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <limits.h>
+#include <scheduler.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -351,6 +356,14 @@ int main(int argc, char* argv[]) {
     g_state.last_restart_window_start = time(NULL);
     g_state.current_backoff_ms        = INITIAL_BACKOFF_MS;
 
+    pthread_t scheduler_thread;
+
+    SchedulerServiceConfig sched_cfg = {.shutdown_flag = &g_shutdown_requested};
+
+    if (fetch_scheduler_start(&scheduler_thread, &sched_cfg) != 0) {
+        perror("fetch_scheduler_start");
+        exit(EXIT_FAILURE);
+    }
     LOG_INFO("WATCHDOG", "Entering main loop");
 
     while (!g_shutdown_requested) {
@@ -384,6 +397,10 @@ int main(int argc, char* argv[]) {
         kill(g_state.server_pid, SIGTERM);
         waitpid(g_state.server_pid, &status, 0);
         LOG_INFO("WATCHDOG", "Server stopped");
+    }
+
+    if (fetch_scheduler_stop(scheduler_thread) != 0) {
+        perror("pthread_join");
     }
 
     remove_pid_file(config.pid_file);

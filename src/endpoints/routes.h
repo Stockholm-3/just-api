@@ -3,9 +3,11 @@
 #include "endpoints/echo.h"
 #include "endpoints/elpris.h"
 #include "endpoints/forecast.h"
+#include "endpoints/get_plan.h"
 #include "endpoints/health.h"
 #include "endpoints/home.h"
 #include "endpoints/hourly.h"
+#include "endpoints/minutely.h"
 #include "endpoints/weather.h"
 
 #include <http_utils.h>
@@ -31,9 +33,13 @@ Route g_routes[] = {
     {"GET", "/v1/weather", handle_weather_by_city},
     {"GET", "/v1/current", handle_current_weather},
     {"GET", "/v1/hourly", handle_hourly_weather},
+    {"GET", "/v1/minutely", handle_minutely_weather},
     {"GET", "/v1/forecast", handle_forecast_weather},
+    {"GET", "/v1/forecast/minutely", handle_minutely_weather},
+    {"GET", "/v1/forecast/hourly", handle_hourly_weather},
     {"GET", "/v1/cities", handle_city_search},
     {"GET", "/v1/elpris", handle_elpris_route},
+    {"GET", "/v1/get_plan", handle_get_plan},
 };
 
 #define ROUTE_COUNT (sizeof(g_routes) / sizeof(g_routes[0]))
@@ -44,7 +50,8 @@ int handle_not_found(HTTPServerConnection* conn, const char* path) {
         msg, sizeof(msg),
         "The requested endpoint '%s' was not found. Available endpoints: "
         "GET /, POST /echo, GET /v1/health, GET /v1/current?lat=XX&lon=YY, "
-        "GET /v1/hourly?lat=XX&lon=YY&hours=24, GET "
+        "GET /v1/hourly?lat=XX&lon=YY&hours=24, "
+        "GET /v1/minutely?lat=XX&lon=YY&hours=24, GET "
         "/v1/hourly?city=NAME&country=CODE&hours=24, "
         "GET /v1/weather?city=NAME&country=CODE, GET /v1/cities?query=SEARCH",
         path);

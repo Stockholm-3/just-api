@@ -11,7 +11,7 @@
 #include <time.h>
 
 #define BASE_URL "https://www.elprisetjustnu.se/api/v1/prices/"
-#define DEFAULT_CACHE_DIR ".cache/elpris_latest"
+#define DEFAULT_CACHE_DIR "./cache/elpris_latest"
 #define HISTORICAL_CACHE_TTL (60 * 60 * 24 * 365 * 10) /* 10 years */
 
 static FileCacheInstance* g_latest_cache     = NULL;
