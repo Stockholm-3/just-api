@@ -32,7 +32,7 @@ static int work_throw(void* /*arg*/, ThreadPoolTask* /*task*/) {
 /* A normal task submitted after the throwing one — verifies the worker
  * thread is still alive and functional after catching the exception. */
 static volatile int g_normal_ran = 0;
-static int work_normal(void* /*arg*/, ThreadPoolTask* /*task*/) {
+static int          work_normal(void* /*arg*/, ThreadPoolTask* /*task*/) {
     g_normal_ran = 1;
     return 0;
 }
@@ -58,7 +58,8 @@ static int run_test(void) {
     thread_pool_destroy(pool);
 
     if (g_done_called != 1) {
-        printf("  FAIL: done_fn call count: expected 1, got %d\n", g_done_called);
+        printf("  FAIL: done_fn call count: expected 1, got %d\n",
+               g_done_called);
         return 1;
     }
     if (g_done_status != TP_STATUS_ERROR) {

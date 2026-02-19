@@ -125,7 +125,7 @@ static int work_check_remaining(void* arg, ThreadPoolTask* task) {
 /* Records submission-order index supplied via arg into g_order[] */
 static int work_record_order(void* arg, ThreadPoolTask* task) {
     (void)task;
-    int idx = g_order_idx++;
+    int idx      = g_order_idx++;
     g_order[idx] = *(int*)arg;
     return 0;
 }
@@ -212,15 +212,14 @@ static int test_done_fn_receives_status(void) {
 }
 
 static int test_many_tasks(void) {
-    const int     N    = 50;
-    ThreadPool*   pool = thread_pool_create(4, 0);
-    volatile int  counters[50];
+    const int    N    = 50;
+    ThreadPool*  pool = thread_pool_create(4, 0);
+    volatile int counters[50];
     memset((void*)counters, 0, sizeof(counters));
 
     for (int i = 0; i < N; i++) {
-        ThreadPoolTask* t = thread_pool_submit(pool, work_increment,
-                                               (void*)&counters[i], NULL,
-                                               NULL, 0);
+        ThreadPoolTask* t = thread_pool_submit(
+            pool, work_increment, (void*)&counters[i], NULL, NULL, 0);
         TEST_ASSERT(t != NULL);
     }
 
@@ -393,8 +392,7 @@ static int test_stats_completed_includes_cancelled(void) {
         usleep(100);
     }
 
-    ThreadPoolTask* t2 =
-        thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
+    ThreadPoolTask* t2 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
     TEST_ASSERT(t2 != NULL);
     thread_pool_cancel(t2);
 
@@ -436,7 +434,7 @@ static int test_stats_completed_includes_timeout(void) {
 static int test_stats_null(void) {
     ThreadPool*     pool = thread_pool_create(1, 0);
     ThreadPoolStats s;
-    thread_pool_get_stats(NULL, &s); /* must not crash */
+    thread_pool_get_stats(NULL, &s);   /* must not crash */
     thread_pool_get_stats(pool, NULL); /* must not crash */
     thread_pool_destroy(pool);
     return 0;
@@ -506,13 +504,11 @@ static int test_max_pending_rejects(void) {
     }
 
     /* task2 fills the pending slot */
-    ThreadPoolTask* t2 =
-        thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
+    ThreadPoolTask* t2 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
     TEST_ASSERT(t2 != NULL);
 
     /* task3 must be rejected — queue is full */
-    ThreadPoolTask* t3 =
-        thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
+    ThreadPoolTask* t3 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
     TEST_ASSERT(t3 == NULL);
 
     g_task_release = 1;
@@ -531,7 +527,7 @@ static int test_max_pending_rejects(void) {
 static int test_wait_idle_then_process_stress(void) {
     const int ITERS = 200;
     for (int i = 0; i < ITERS; i++) {
-        g_done_called = 0;
+        g_done_called    = 0;
         ThreadPool* pool = thread_pool_create(1, 0);
         thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0);
         thread_pool_wait_idle(pool);
@@ -584,7 +580,7 @@ static int test_stats_active_pending_consistent(void) {
 
 /* WorkQueue: tasks must execute in FIFO order with a single worker. */
 static int test_work_queue_fifo(void) {
-    const int N = 5;
+    const int N      = 5;
     int       ids[5] = {0, 1, 2, 3, 4};
 
     g_order_idx = 0;
