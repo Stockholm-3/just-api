@@ -1,6 +1,8 @@
 #include "fetcher.h"
 
+#include "energy_plan/city_registry.h"
 #include "file_cache.h"
+#include "logger.h"
 
 #include <http_client.h>
 #include <jansson.h>
@@ -11,93 +13,22 @@
 #include <unistd.h>
 #include <utils.h>
 
-/* =========================
-   Internal Structures
-   ========================= */
-
 typedef struct {
     int   done;
     int   success;
     char* response;
 } SyncHttpContext;
 
-/* One entry from JSON file */
-typedef struct {
-    char* city;
-    char* price;
-} CityPrice;
-
-void free_city_price_list(CityPrice* list, size_t count) {
-    if (!list) {
-        return;
-    }
-    for (size_t i = 0; i < count; i++) {
-        free(list[i].city);
-        free(list[i].price);
-    }
-    free(list);
-}
-
-CityPrice* load_city_price_file(const char* filename, size_t* count) {
-    json_error_t error;
-    json_t*      root = json_load_file(filename, 0, &error);
-    if (!root) {
-        fprintf(stderr, "JSON error in %s (line %d): %s\n", filename,
-                error.line, error.text);
-        return NULL;
-    }
-
-    if (!json_is_array(root)) {
-        fprintf(stderr, "Root element is not an array\n");
-        json_decref(root);
-        return NULL;
-    }
-
-    size_t     n    = json_array_size(root);
-    CityPrice* list = calloc(n, sizeof(CityPrice));
-    if (!list) {
-        perror("calloc");
-        json_decref(root);
-        return NULL;
-    }
-
-    size_t out = 0;
-    for (size_t i = 0; i < n; i++) {
-        json_t* entry = json_array_get(root, i);
-        if (!json_is_object(entry)) {
-            continue;
-        }
-
-        json_t* city  = json_object_get(entry, "City");
-        json_t* price = json_object_get(entry, "Price");
-        if (!json_is_string(city) || !json_is_string(price)) {
-            continue;
-        }
-
-        list[out].city  = strdup(json_string_value(city));
-        list[out].price = strdup(json_string_value(price));
-        if (!list[out].city || !list[out].price) {
-            perror("strdup");
-            free_city_price_list(list, out);
-            json_decref(root);
-            return NULL;
-        }
-        out++;
-    }
-
-    json_decref(root);
-    *count = out;
-    return list;
-}
-
 static void sync_http_callback(const char* event, const char* response,
                                void* context) {
     SyncHttpContext* ctx = context;
     ctx->done            = 1;
+
     if (ctx->response) {
         free(ctx->response);
         ctx->response = NULL;
     }
+
     if (strcmp(event, "RESPONSE") == 0 && response) {
         ctx->success  = 1;
         ctx->response = strdup(response);
@@ -111,17 +42,18 @@ static void sync_http_callback(const char* event, const char* response,
 }
 
 static char* run_http_get_sync(const char* url, const char* port,
-                               uint64_t timeout) {
+                               uint64_t timeout_ms) {
     SyncHttpContext ctx    = {0};
     HttpClient*     client = NULL;
+
     if (http_client_init(url, &client, port) != 0) {
-        fprintf(stderr, "http_client_init failed\n");
+        LOG_WARN("FETCHER", "http_client_init failed for: %s", url);
         return NULL;
     }
 
     client->callback = sync_http_callback;
     client->context  = &ctx;
-    client->timeout  = timeout;
+    client->timeout  = timeout_ms;
     client->state    = HTTP_CLIENT_STATE_INIT;
 
     while (!ctx.done) {
@@ -134,20 +66,108 @@ static char* run_http_get_sync(const char* url, const char* port,
     return ctx.response;
 }
 
-int fetch_all_price_groups_sync(FileCacheInstance* cache,
-                                const char* cache_key_prefix, const char* port,
-                                uint64_t timeout) {
+static int build_cache_key(const char* raw, char* out, size_t out_size) {
+    if (file_cache_normalize_string(raw, out, out_size) != FILE_CACHE_OK) {
+        LOG_WARN("FETCHER", "Failed to normalize cache key: %s", raw);
+        return -1;
+    }
+    return 0;
+}
+
+static void fetch_city_forecast(FileCacheInstance* cache,
+                                const CityEntry* entry, const char* port,
+                                uint64_t timeout_ms) {
+    char raw_key[FILE_CACHE_KEY_LENGTH];
+    snprintf(raw_key, sizeof(raw_key), "%s-%.6f-%.6f", entry->city, entry->lat,
+             entry->lon);
+
+    char cache_key[FILE_CACHE_KEY_LENGTH];
+    if (build_cache_key(raw_key, cache_key, sizeof(cache_key)) != 0) {
+        return;
+    }
+
+    // Always delete the existing entry first so stale data never survives a
+    // failed fetch — if the request below fails the key stays absent rather
+    // than returning old data to consumers.
+    file_cache_invalidate(cache, cache_key);
+
+    char url[512];
+    snprintf(url, sizeof(url),
+             "http://127.0.0.1:%s/v1/forecast/minutely?lat=%.6f&lon=%.6f", port,
+             entry->lat, entry->lon);
+
+    LOG_INFO("FETCHER", "Fetching forecast for %s (%.6f, %.6f)", entry->city,
+             entry->lat, entry->lon);
+
+    char* response = run_http_get_sync(url, port, timeout_ms);
+    if (!response) {
+        LOG_WARN("FETCHER", "HTTP request failed for %s", entry->city);
+        return;
+    }
+
+    json_error_t err;
+    json_t*      root = json_loads(response, 0, &err);
+    free(response);
+
+    if (!root) {
+        LOG_WARN("FETCHER", "JSON parse error for %s: %s", entry->city,
+                 err.text);
+        return;
+    }
+
+    if (file_cache_save_json(cache, cache_key, root) != FILE_CACHE_OK) {
+        LOG_WARN("FETCHER", "Failed to save forecast to cache for %s",
+                 entry->city);
+        json_decref(root);
+        return;
+    }
+
+    json_decref(root);
+
+    char path[FILE_CACHE_MAX_PATH_LENGTH];
+    if (file_cache_get_filepath(cache, cache_key, path, sizeof(path)) ==
+        FILE_CACHE_OK) {
+        LOG_INFO("FETCHER", "Saved forecast for %s to: %s", entry->city, path);
+    }
+}
+
+void fetch_all_city_forecasts(FileCacheInstance* cache, const char* port,
+                              uint64_t timeout_ms) {
+    if (!cache || !port) {
+        LOG_WARN("FETCHER", "Invalid arguments to fetch_all_city_forecasts");
+        return;
+    }
+
+    CityLoadResult cities = city_registry_load_all(CITY_REGISTRY_FILE);
+    if (!cities.entries || cities.count == 0) {
+        LOG_WARN("FETCHER", "No cities in registry, skipping weather fetch");
+        free(cities.entries);
+        return;
+    }
+
+    LOG_INFO("FETCHER", "Fetching forecasts for %d cities", cities.count);
+
+    for (int i = 0; i < cities.count; i++) {
+        fetch_city_forecast(cache, &cities.entries[i], port, timeout_ms);
+    }
+
+    free(cities.entries);
+}
+
+int fetch_all_price_groups(FileCacheInstance* cache,
+                           const char* cache_key_prefix, const char* port,
+                           uint64_t timeout_ms) {
     static const char* groups[] = {"SE1", "SE2", "SE3", "SE4"};
     const size_t       COUNT    = sizeof(groups) / sizeof(groups[0]);
 
-    if (!cache || !cache_key_prefix) {
-        fprintf(stderr, "Invalid cache instance or key prefix\n");
+    if (!cache || !cache_key_prefix || !port) {
+        LOG_WARN("FETCHER", "Invalid arguments to fetch_all_price_groups");
         return -1;
     }
 
     json_t* merged = json_array();
     if (!merged) {
-        fprintf(stderr, "json_array failed\n");
+        LOG_WARN("FETCHER", "json_array allocation failed");
         return -1;
     }
 
@@ -155,19 +175,22 @@ int fetch_all_price_groups_sync(FileCacheInstance* cache,
         char url[256];
         snprintf(url, sizeof(url), "http://127.0.0.1:%s/v1/elpris?price=%s",
                  port, groups[i]);
-        printf("Fetching %s...\n", groups[i]);
 
-        char* response = run_http_get_sync(url, port, timeout);
+        LOG_INFO("FETCHER", "Fetching elpris for %s", groups[i]);
+
+        char* response = run_http_get_sync(url, port, timeout_ms);
         if (!response) {
-            fprintf(stderr, "Failed to fetch %s\n", groups[i]);
+            LOG_WARN("FETCHER", "HTTP request failed for %s", groups[i]);
             continue;
         }
 
         json_error_t err;
         json_t*      root = json_loads(response, 0, &err);
         free(response);
+
         if (!root) {
-            fprintf(stderr, "JSON parse error: %s\n", err.text);
+            LOG_WARN("FETCHER", "JSON parse error for %s: %s", groups[i],
+                     err.text);
             continue;
         }
 
@@ -178,46 +201,39 @@ int fetch_all_price_groups_sync(FileCacheInstance* cache,
         } else if (json_is_object(root)) {
             json_array_append(merged, root);
         } else {
-            fprintf(stderr, "Unexpected JSON format\n");
+            LOG_WARN("FETCHER", "Unexpected JSON format for %s", groups[i]);
         }
 
         json_decref(root);
     }
 
-    /* Normalize cache key */
-    char cache_key_input[FILE_CACHE_KEY_LENGTH];
-    snprintf(cache_key_input, sizeof(cache_key_input), "%s_merged",
-             cache_key_prefix);
+    char raw_key[FILE_CACHE_KEY_LENGTH];
+    snprintf(raw_key, sizeof(raw_key), "%s_merged", cache_key_prefix);
 
     char cache_key[FILE_CACHE_KEY_LENGTH];
-    if (file_cache_normalize_string(cache_key_input, cache_key,
-                                    sizeof(cache_key)) != FILE_CACHE_OK) {
-        fprintf(stderr, "Failed to normalize cache key\n");
+    if (build_cache_key(raw_key, cache_key, sizeof(cache_key)) != 0) {
         json_decref(merged);
         return -1;
     }
+
+    // Delete the old merged file before writing so consumers never read a
+    // mix of old and new data if the process is interrupted mid-write.
+    file_cache_invalidate(cache, cache_key);
 
     if (file_cache_save_json(cache, cache_key, merged) != FILE_CACHE_OK) {
-        fprintf(stderr, "Failed to save merged JSON to cache key '%s'\n",
-                cache_key);
+        LOG_WARN("FETCHER", "Failed to save merged elpris to cache key '%s'",
+                 cache_key);
         json_decref(merged);
         return -1;
     }
 
-    FileCacheLock* lock = NULL;
-    if (file_cache_lock(cache, cache_key, FILE_CACHE_LOCK_EXCLUSIVE, &lock) ==
-        FILE_CACHE_OK) {
-        file_cache_unlock(lock);
-    }
+    json_decref(merged);
 
     char path[FILE_CACHE_MAX_PATH_LENGTH];
     if (file_cache_get_filepath(cache, cache_key, path, sizeof(path)) ==
         FILE_CACHE_OK) {
-        printf("Saved merged data to cache file: %s\n", path);
-    } else {
-        printf("Merged data saved to cache (path unknown)\n");
+        LOG_INFO("FETCHER", "Saved merged elpris to: %s", path);
     }
 
-    json_decref(merged);
     return 0;
 }
