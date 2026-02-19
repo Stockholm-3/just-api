@@ -77,7 +77,8 @@ static int build_cache_key(const char* raw, char* out, size_t out_size) {
 static void fetch_city_forecast(FileCacheInstance* cache,
                                 const CityEntry* entry, const char* port,
                                 uint64_t timeout_ms) {
-    char raw_key[FILE_CACHE_KEY_LENGTH];
+    char raw_key[sizeof(entry->city) +
+                 32]; // city name + two coords with separators
     snprintf(raw_key, sizeof(raw_key), "%s-%.6f-%.6f", entry->city, entry->lat,
              entry->lon);
 
