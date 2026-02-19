@@ -6,6 +6,8 @@
 
 typedef struct {
     volatile sig_atomic_t* shutdown_flag;
+    const char* compute_exe; /* Path to compute binary to fork after each fetch.
+                                NULL to disable. */
 } SchedulerServiceConfig;
 
 /* Starts scheduler thread */
