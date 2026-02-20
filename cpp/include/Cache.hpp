@@ -3,6 +3,7 @@
 
 #include <string>
 #include <chrono>
+#include <cstddef>
 #include <unordered_map>
 
 class Cache {
@@ -15,7 +16,7 @@ class Cache {
         void put(const std::string& key, const std::string& value, int ttlSeconds);
         bool get(const std::string& key, std::string* outValue);
         void purgeExpired();
-        size_t size() const;
+        std::size_t size() const;
     
     private:
         struct Entry {

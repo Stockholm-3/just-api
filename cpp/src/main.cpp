@@ -2,9 +2,9 @@
 #include <string>
 #include <vector>
 
-#include "Cache.hpp"
-#include "Config.hpp"
-#include "EnergyPlan.hpp"
+#include "../include/Cache.hpp"
+#include "../include/Config.hpp"
+#include "../include/EnergyPlan.hpp"
 
 int main() {
     Config config("https://api.example.com", 300);

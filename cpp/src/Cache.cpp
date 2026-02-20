@@ -1,4 +1,4 @@
-#include "Cache.hpp"
+#include "../include/Cache.hpp"
 
 Cache::Cache() = default;
 
@@ -48,6 +48,6 @@ void Cache::purgeExpired() {
     }
 }
 
-size_t Cache::size() const {
+std::size_t Cache::size() const {
     return entries_.size();
 }
