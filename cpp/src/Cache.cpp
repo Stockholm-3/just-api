@@ -11,14 +11,14 @@ Cache& Cache::operator=(const Cache& other) {
     return *this;
 }
 
-Cache::~Cache() {
-    entries_.clear();
-}
+Cache::~Cache() { entries_.clear(); }
 
-void Cache::put(const std::string& key, const std::string& value, int ttlSeconds) {
+void Cache::put(const std::string& key, const std::string& value,
+                int ttlSeconds) {
     Entry entry;
     entry.value = value;
-    entry.expiresAt = std::chrono::steady_clock::now() + std::chrono::seconds(ttlSeconds);
+    entry.expiresAt =
+        std::chrono::steady_clock::now() + std::chrono::seconds(ttlSeconds);
     entries_[key] = entry;
 }
 
@@ -39,7 +39,7 @@ bool Cache::get(const std::string& key, std::string* outValue) {
 
 void Cache::purgeExpired() {
     const auto now = std::chrono::steady_clock::now();
-    for (auto it = entries_.begin(); it != entries_.end(); ) {
+    for (auto it = entries_.begin(); it != entries_.end();) {
         if (now > it->second.expiresAt) {
             it = entries_.erase(it);
         } else {
@@ -48,6 +48,4 @@ void Cache::purgeExpired() {
     }
 }
 
-std::size_t Cache::size() const {
-    return entries_.size();
-}
+std::size_t Cache::size() const { return entries_.size(); }

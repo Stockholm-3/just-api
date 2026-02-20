@@ -1,23 +1,24 @@
-#include <iostream>
-#include <string>
-#include <vector>
-
 #include "../include/Cache.hpp"
 #include "../include/Config.hpp"
 #include "../include/EnergyPlan.hpp"
 
+#include <iostream>
+#include <string>
+#include <vector>
+
 int main() {
     Config config("https://api.example.com", 300);
-    Cache cache;
+    Cache  cache;
     cache.put("last_city", "Stockholm", config.cacheTtlSeconds());
 
-    EnergyPlan energyPlan;
+    EnergyPlan          energyPlan;
     std::vector<double> solarForecast(24, 0.5);
-    auto plan = energyPlan.generatePlan(1.2, solarForecast, 3.0);
+    auto                plan = energyPlan.generatePlan(1.2, solarForecast, 3.0);
 
     std::cout << "Config base URL: " << config.baseUrl() << std::endl;
     std::cout << "Cache entries: " << cache.size() << std::endl;
-    std::cout << "Total energy needed (kWh): " << energyPlan.totalKwh(plan) << std::endl;
+    std::cout << "Total energy needed (kWh): " << energyPlan.totalKwh(plan)
+              << std::endl;
 
     return 0;
 }
