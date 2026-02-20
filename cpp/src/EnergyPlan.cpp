@@ -1,4 +1,4 @@
-#include "EnergyPlan.hpp"
+#include "../include/EnergyPlan.hpp"
 
 EnergyPlan::EnergyPlan() = default;
 
