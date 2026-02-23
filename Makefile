@@ -38,26 +38,24 @@ LIB_INCLUDES := $(shell find -L $(LIB_DIR) -type d)
 INCLUDES := $(addprefix -I,$(SRC_INCLUDES)) $(addprefix -I,$(LIB_INCLUDES)) -I$(INC_DIR)
 #POSIX_FLAGS := -D_POSIX_C_SOURCE=200809L
 
-CFLAGS_SRC := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP $(INCLUDES)
-CFLAGS_LIB := $(CFLAGS_BASE) -w $(INCLUDES)
-CXXFLAGS_LIB := $(CFLAGS_BASE) -w $(INCLUDES)
+CFLAGS_SRC   := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP $(INCLUDES)
+CFLAGS_LIB   := $(CFLAGS_BASE) -w $(INCLUDES)
+CXXFLAGS_LIB := $(CFLAGS_BASE) -w -std=c++11 $(INCLUDES)
 
 LDFLAGS :=
-LIBS    := -lmbedtls -lmbedx509 -lmbedcrypto
+LIBS    := -lmbedtls -lmbedx509 -lmbedcrypto -pthread -lstdc++
 
 # ------------------------------------------------------------
 # Source and object files
 # ------------------------------------------------------------
-SRC_FILES := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*' ! -path '*/energy_plan/fetch_scheduler.c')
-LIB_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.c' ! -path '*/weather/*')
-LIB_CPP_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.cpp')
-CPP_SRC_FILES := $(shell find cpp/src -type f -name '*.cpp' ! -name 'main.cpp')
+SRC_FILES     := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*')
+LIB_FILES     := $(shell find -L $(LIB_DIR) -type f -name '*.c'   ! -path '*/weather/*')
+LIB_CPP_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.cpp' ! -path '*/weather/*')
 
-OBJ_SRC := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC_FILES))
-OBJ_LIB := $(patsubst %.c,$(BUILD_DIR)/%.o,$(LIB_FILES))
-OBJ_LIB_CPP := $(patsubst %.cpp,$(BUILD_DIR)/cpp/%.o,$(LIB_CPP_FILES))
-OBJ_CPP_SRC := $(patsubst cpp/%.cpp,$(BUILD_DIR)/cpp/%.o,$(CPP_SRC_FILES))
-OBJ     := $(OBJ_SRC) $(OBJ_LIB) $(OBJ_LIB_CPP) $(OBJ_CPP_SRC)
+OBJ_SRC     := $(patsubst %.c,  $(BUILD_DIR)/%.o, $(SRC_FILES))
+OBJ_LIB     := $(patsubst %.c,  $(BUILD_DIR)/%.o, $(LIB_FILES))
+OBJ_LIB_CPP := $(patsubst %.cpp,$(BUILD_DIR)/%.o, $(LIB_CPP_FILES))
+OBJ         := $(OBJ_SRC) $(OBJ_LIB) $(OBJ_LIB_CPP)
 
 # ------------------------------------------------------------
 # Watchdog binary
@@ -78,7 +76,7 @@ watchdog: $(WATCHDOG_BIN)
 	@echo "Watchdog build complete. [$(BUILD_TYPE)]"
 
 # Build watchdog binary
-$(WATCHDOG_BIN): $(WATCHDOG_OBJ) $(OBJ_LIB)
+$(WATCHDOG_BIN): $(WATCHDOG_OBJ) $(OBJ_LIB) $(OBJ_LIB_CPP)
 	@mkdir -p $(dir $@)
 	@echo "Linking watchdog..."
 	@$(CC) $(LDFLAGS) $^ -o $@ $(LIBS)
@@ -100,15 +98,11 @@ $(BUILD_DIR)/lib/%.o: lib/%.c
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS_LIB) -c $< -o $@
 
-$(BUILD_DIR)/cpp/%.o: %.cpp
-	@echo "Compiling library C++ $<... [$(BUILD_TYPE)]"
+# Compile library C++ sources (relaxed flags)
+$(BUILD_DIR)/lib/%.o: lib/%.cpp
+	@echo "Compiling library $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS_LIB) -std=c++17 -Icpp/include -c $< -o $@
-
-$(BUILD_DIR)/cpp/src/%.o: cpp/src/%.cpp
-	@echo "Compiling C++ $<... [$(BUILD_TYPE)]"
-	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS_LIB) -std=c++17 -Icpp/include -c $< -o $@
+	@$(CXX) $(CXXFLAGS_LIB) -c $< -o $@
 
 # ------------------------------------------------------------
 # Utilities
@@ -142,12 +136,12 @@ start-server: $(BIN)
 .PHONY: format
 format:
 	@echo "Checking formatting..."
-	@unformatted=$$(find . \( -name '*.c' -o -name '*.h' \) -print0 | \
+	@unformatted=$$(find . \( -name '*.c' -o -name '*.h' -o -name '*.cpp' \) -print0 | \
 		xargs -0 clang-format -style=file -output-replacements-xml | \
 		grep -c "<replacement " || true); \
 	if [ $$unformatted -ne 0 ]; then \
 		echo "$$unformatted file(s) need formatting"; \
-		find . \( -name '*.c' -o -name '*.h' \) -print0 | \
+		find . \( -name '*.c' -o -name '*.h' -o -name '*.cpp' \) -print0 | \
 		xargs -0 clang-format -style=file -n -Werror; \
 		exit 1; \
 	else \
@@ -158,7 +152,7 @@ format:
 .PHONY: format-fix
 format-fix:
 	@echo "Applying clang-format..."
-	find . \( -name '*.c' -o -name '*.h' \) -print0 | xargs -0 clang-format -i -style=file
+	find . \( -name '*.c' -o -name '*.h' -o -name '*.cpp' \) -print0 | xargs -0 clang-format -i -style=file
 	@echo "Formatting applied."
 
 .PHONY: lint

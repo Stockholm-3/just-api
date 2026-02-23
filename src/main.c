@@ -1,10 +1,12 @@
 #include "config/config_parser.h"
 #include "logger/logger.h"
 #include "smw.h"
+#include "thread_pool.h"
 #include "utils.h"
 #include "weather_server.h"
 
 #include <getopt.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -87,6 +89,21 @@ int main(int argc, char* argv[]) {
 
     smw_init();
 
+    /* Initialize thread pool */
+    ThreadPool* pool = thread_pool_create(config.thread_pool.num_workers,
+                                          config.thread_pool.max_pending);
+    if (!pool) {
+        LOG_ERROR("MAIN", "Failed to create thread pool");
+        smw_dispose();
+        logger_shutdown();
+        return 1;
+    }
+    LOG_INFO("MAIN", "Thread pool created (%d workers, max_pending=%d)",
+             config.thread_pool.num_workers, config.thread_pool.max_pending);
+
+    /* SMW task: drain completion queue every event-loop cycle */
+    smw_create_task(pool, thread_pool_smw_callback);
+
     WeatherServer server;
     weather_server_initiate(&server);
 
@@ -98,6 +115,10 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO("MAIN", "Shutdown signal received, cleaning up...");
     weather_server_dispose(&server);
+    thread_pool_wait_idle(pool);
+    thread_pool_process_completions(pool);
+    thread_pool_destroy(pool);
+    LOG_INFO("MAIN", "Thread pool destroyed");
     smw_dispose();
 
     logger_shutdown();

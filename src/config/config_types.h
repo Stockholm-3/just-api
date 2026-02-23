@@ -29,6 +29,12 @@ typedef struct {
         int  max_restarts;
         int  restart_window_sec;
     } watchdog;
+
+    /* Thread Pool Configuration */
+    struct {
+        int num_workers;
+        int max_pending;
+    } thread_pool;
 } ServerConfig;
 
 /* Default configuration values */
