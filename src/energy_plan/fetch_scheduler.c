@@ -2,6 +2,7 @@
 
 #include "fetcher.h"
 #include "logger.h"
+#include "sys/wait.h"
 
 #include <scheduler.h>
 #include <signal.h>
@@ -28,8 +29,6 @@ static void fork_compute(const char* exe) {
         return;
     }
 
-    signal(SIGCHLD, SIG_IGN);
-
     pid_t pid = fork();
     if (pid < 0) {
         LOG_ERROR("FETCH_SCHEDULER", "fork() failed for compute step");
@@ -41,6 +40,13 @@ static void fork_compute(const char* exe) {
         LOG_ERROR("FETCH_SCHEDULER", "execl() failed for: %s", exe);
         _exit(1);
     }
+
+    // IGNORE THE CHILD!!!! :):)
+    int   status;
+    pid_t wpid;
+    do {
+        wpid = waitpid(pid, &status, WNOHANG);
+    } while (wpid > 0);
 }
 
 typedef struct {
