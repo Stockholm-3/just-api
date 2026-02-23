@@ -59,7 +59,6 @@ static char* run_http_get_sync(const char* url, const char* port,
     while (!ctx.done) {
         uint64_t now = system_monotonic_ms();
         http_client_work(client, now);
-        usleep(1000);
     }
 
     http_client_dispose(&client);
@@ -99,6 +98,8 @@ static void fetch_city_forecast(FileCacheInstance* cache,
 
     LOG_INFO("FETCHER", "Fetching forecast for %s (%.6f, %.6f)", entry->city,
              entry->lat, entry->lon);
+
+    LOG_INFO("FETCHER", "Fetching from URL: %s", url);
 
     char* response = run_http_get_sync(url, port, timeout_ms);
     if (!response) {

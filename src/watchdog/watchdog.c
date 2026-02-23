@@ -7,11 +7,14 @@
 
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE
+#    include "netinet/in.h"
+#    include "sys/socket.h"
 #endif
 
 #include "../logger/logger.h"
-#include "fetch_scheduler.h"
+#include "energy_plan/fetch_scheduler.h"
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -272,6 +275,32 @@ static void parse_args(int argc, char* argv[], WatchdogConfig* config) {
     }
 }
 
+static void wait_for_server(const char* host, int port, int max_wait_ms) {
+    int elapsed = 0;
+    while (elapsed < max_wait_ms) {
+        int fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) {
+            break;
+        }
+
+        struct sockaddr_in addr = {0};
+        addr.sin_family         = AF_INET;
+        addr.sin_port           = htons((uint16_t)port);
+        inet_pton(AF_INET, host, &addr.sin_addr);
+
+        if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+            close(fd);
+            LOG_INFO("WATCHDOG", "Server ready after %dms", elapsed);
+            return;
+        }
+        close(fd);
+        usleep(50 * 1000);
+        elapsed += 50;
+    }
+    LOG_WARN("WATCHDOG", "Server not ready after %dms, proceeding anyway",
+             max_wait_ms);
+}
+
 int main(int argc, char* argv[]) {
     WatchdogConfig config = {
         .server_path = DEFAULT_SERVER_PATH,
@@ -282,10 +311,8 @@ int main(int argc, char* argv[]) {
 
     parse_args(argc, argv, &config);
 
-    // Convert log_dir to absolute path before daemonizing (chdir changes to /)
     static char abs_log_dir[PATH_MAX];
     if (realpath(config.log_dir, abs_log_dir) == NULL) {
-        // Directory might not exist yet, try to create it
         if (mkdir(config.log_dir, 0755) == 0) {
             if (realpath(config.log_dir, abs_log_dir) == NULL) {
                 fprintf(stderr, "Cannot resolve log directory: %s\n",
@@ -301,7 +328,6 @@ int main(int argc, char* argv[]) {
     config.log_dir = abs_log_dir;
     g_log_dir      = abs_log_dir;
 
-    // Convert current directory to absolute path (base dir for server)
     static char abs_base_dir[PATH_MAX];
     if (realpath(".", abs_base_dir) == NULL) {
         fprintf(stderr, "Cannot resolve base directory\n");
@@ -309,7 +335,6 @@ int main(int argc, char* argv[]) {
     }
     g_base_dir = abs_base_dir;
 
-    // Initialize logger before anything else
     if (logger_init(config.log_dir, LOG_DEBUG) != 0) {
         fprintf(stderr, "Failed to initialize logger\n");
         return 1;
@@ -324,7 +349,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Convert to absolute path before daemonizing (chdir changes to /)
     static char abs_server_path[PATH_MAX];
     if (realpath(config.server_path, abs_server_path) == NULL) {
         LOG_ERROR("WATCHDOG", "Cannot resolve path: %s", config.server_path);
@@ -356,19 +380,36 @@ int main(int argc, char* argv[]) {
     g_state.last_restart_window_start = time(NULL);
     g_state.current_backoff_ms        = INITIAL_BACKOFF_MS;
 
+    // Spawn the server first, wait for it to be ready, then start the
+    // scheduler so fetches never race against a server that isn't up yet.
+    g_state.server_pid = spawn_server(config.server_path);
+    if (g_state.server_pid < 0) {
+        LOG_ERROR("WATCHDOG", "Failed to spawn server on startup");
+        logger_shutdown();
+        return 1;
+    }
+
+    wait_for_server("127.0.0.1", 10680, 10000);
+
     pthread_t scheduler_thread;
 
-    SchedulerServiceConfig sched_cfg = {.shutdown_flag = &g_shutdown_requested};
+    SchedulerServiceConfig sched_cfg = {
+        .shutdown_flag = &g_shutdown_requested,
+    };
 
     if (fetch_scheduler_start(&scheduler_thread, &sched_cfg) != 0) {
         perror("fetch_scheduler_start");
         exit(EXIT_FAILURE);
     }
+
     LOG_INFO("WATCHDOG", "Entering main loop");
 
     while (!g_shutdown_requested) {
         if (g_state.server_pid <= 0) {
             g_state.server_pid = spawn_server(config.server_path);
+            if (g_state.server_pid > 0) {
+                wait_for_server("127.0.0.1", 10680, 10000);
+            }
         }
 
         int status = monitor_server();
