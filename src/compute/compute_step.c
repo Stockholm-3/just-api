@@ -334,7 +334,7 @@ static int write_output(const CityData* c,
     json_object_set_new(root, "latitude", json_real(c->latitude));
     json_object_set_new(root, "longitude", json_real(c->longitude));
 
-    char zone_str[8];
+    char zone_str[16];
     snprintf(zone_str, sizeof(zone_str), "SE%d", c->price_zone + 1);
     json_object_set_new(root, "price_zone", json_string(zone_str));
     json_object_set_new(root, "slots_total", json_integer(SLOTS_PER_DAY));
