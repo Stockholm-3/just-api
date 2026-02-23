@@ -487,9 +487,11 @@ static void url_decode(const char* src, char* dst, size_t dst_size) {
     for (size_t i = 0; src[i] && dst_pos + 1 < dst_size; i++) {
         if (src[i] == '%' && src[i + 1] && src[i + 2]) {
             /* Parse hex value */
-            char hex[3] = {src[i + 1], src[i + 2], '\0'};
-            int  value  = (int)strtol(hex, NULL, 16);
-            if (value > 0 && value < 256) {
+            char  hex[3]  = {src[i + 1], src[i + 2], '\0'};
+            char* endptr  = NULL; /* endptr pekar på var parsningen stannade */
+            long  value   = strtol(hex, &endptr, 16); /* tolka hex-tecknen som ett tal (bas 16) */
+            /* kontrollera att båda hex-tecknen var giltiga och att värdet är ett giltigt tecken */
+            if (endptr == hex + 2 && value > 0 && value < 256) {
                 dst[dst_pos++] = (char)value;
                 i += 2;
             } else {
