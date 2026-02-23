@@ -365,6 +365,15 @@ int main(int argc, char* argv[]) {
             logger_shutdown();
             return 1;
         }
+        // TODO: I added this for a quick fix for the fetch step which uses
+        // relative paths. in the future we must change this back and make it
+        // use absolute paths everywhere!
+        if (chdir(abs_base_dir) < 0) {
+            LOG_ERROR("DAEMON", "Failed to chdir to base dir: %s",
+                      abs_base_dir);
+            logger_shutdown();
+            return 1;
+        }
     }
 
     if (write_pid_file(config.pid_file) < 0) {
