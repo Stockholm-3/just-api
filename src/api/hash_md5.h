@@ -1,10 +1,10 @@
 /**
- * hash_md5.h - Modular MD5 hashing utility
+ * hash_md5.h - Modul för MD5-hashning
  *
- * Based on Alexander Peslyak's public domain MD5 implementation
- * Simplified interface for easy integration into any project
+ * Baserad på Alexander Peslyaks MD5-implementering i det publika domänet
+ * Förenklat gränssnitt för enkel integration i vilket projekt som helst
  *
- * Usage:
+ * Användning:
  *   char hash[33];
  *   hash_md5_string("Hello World", hash, sizeof(hash));
  *   printf("Hash: %s\n", hash);
@@ -16,23 +16,23 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* MD5 hash length in hexadecimal characters (32) + null terminator */
+/* MD5-hashlängd i hexadecimala tecken (32) + null-terminator */
 #define HASH_MD5_STRING_LENGTH 33
 
-/* MD5 hash length in bytes (16) */
+/* MD5-hashlängd i byte (16) */
 #define HASH_MD5_BINARY_LENGTH 16
 
 /**
- * Calculate MD5 hash of a memory block and return as hex string
+ * Beräkna MD5-hash av ett minnesblock och returnera som hex-sträng
  *
- * @param data Input data to hash
- * @param data_size Size of input data in bytes
- * @param output Buffer to store hex string (must be at least
- * HASH_MD5_STRING_LENGTH bytes)
- * @param output_size Size of output buffer
- * @return 0 on success, -1 on error
+ * @param data Indata att hasha
+ * @param data_size Storlek på indata i byte
+ * @param output Buffert för hex-sträng (måste vara minst
+ * HASH_MD5_STRING_LENGTH byte)
+ * @param output_size Storlek på utdatabuffert
+ * @return 0 vid framgång, -1 vid fel
  *
- * Example:
+ * Exempel:
  *   char hash[HASH_MD5_STRING_LENGTH];
  *   hash_md5_string("Stockholm59.329318.0686", hash, sizeof(hash));
  *   // hash = "e7a8b9c0d1f2a3b4c5d6e7f8a9b0c1d2"
@@ -41,24 +41,24 @@ int hash_md5_string(const void* data, size_t data_size, char* output,
                     size_t output_size);
 
 /**
- * Calculate MD5 hash and return as binary (16 bytes)
+ * Beräkna MD5-hash och returnera som binär (16 byte)
  *
- * @param data Input data to hash
- * @param data_size Size of input data in bytes
- * @param output Buffer to store binary hash (must be at least
- * HASH_MD5_BINARY_LENGTH bytes)
- * @return 0 on success, -1 on error
+ * @param data Indata att hasha
+ * @param data_size Storlek på indata i byte
+ * @param output Buffert för binär hash (måste vara minst
+ * HASH_MD5_BINARY_LENGTH byte)
+ * @return 0 vid framgång, -1 vid fel
  */
 int hash_md5_binary(const void* data, size_t data_size, unsigned char* output);
 
 /**
- * Convert binary hash to hex string
+ * Konvertera binär hash till hex-sträng
  *
- * @param binary Binary hash (16 bytes)
- * @param output Buffer for hex string (must be at least HASH_MD5_STRING_LENGTH
- * bytes)
- * @param output_size Size of output buffer
- * @return 0 on success, -1 on error
+ * @param binary Binär hash (16 byte)
+ * @param output Buffert för hex-sträng (måste vara minst HASH_MD5_STRING_LENGTH
+ * byte)
+ * @param output_size Storlek på utdatabuffert
+ * @return 0 vid framgång, -1 vid fel
  */
 int hash_md5_binary_to_string(const unsigned char* binary, char* output,
                               size_t output_size);

@@ -1,27 +1,27 @@
 /**
  * @file weather_server_instance.h
- * @brief Weather server instance management for HTTP connections.
+ * @brief Hantering av väderserverinstanser för HTTP-anslutningar.
  *
- * This module provides lifecycle management for individual weather server
- * instances. Each WeatherServerInstance wraps an HTTPServerConnection and
- * handles HTTP request processing for weather-related endpoints.
+ * Denna modul tillhandahåller livscykelhantering för enskilda väderserver-
+ * instanser. Varje WeatherServerInstance omsluter en HTTPServerConnection och
+ * hanterar HTTP-förfrågningsbearbetning för väderrelaterade endpoints.
  *
- * The module supports both stack-allocated and heap-allocated instances,
- * with corresponding initialization and cleanup functions for each allocation
- * method.
+ * Modulen stöder både stackallokerade och heapallokerade instanser,
+ * med motsvarande initierings- och rensningsfunktioner för varje
+ * allokeringsmetod.
  *
- * @par Supported Endpoints:
- * - GET / - Homepage with API documentation
- * - GET/POST /echo - Echo endpoint for debugging
- * - GET /v1/current?lat=XX&lon=YY - Current weather by coordinates
- * - GET /v1/weather?city=NAME&country=CODE - Weather by city name
- * - GET /v1/cities?query=SEARCH - City search for autocomplete
+ * @par Stödda endpoints:
+ * - GET / - Startsida med API-dokumentation
+ * - GET/POST /echo - Echo-endpoint för felsökning
+ * - GET /v1/current?lat=XX&lon=YY - Aktuellt väder via koordinater
+ * - GET /v1/weather?city=NAME&country=CODE - Väder via stadsnamn
+ * - GET /v1/cities?query=SEARCH - Stadssökning för autocomplete
  *
- * @note Instances must be properly initialized before use and disposed of
- *       when no longer needed to prevent resource leaks.
+ * @note Instanser måste initieras korrekt innan användning och avslutas
+ *       när de inte längre behövs för att förhindra resursläckor.
  *
- * @see http_server_connection.h for the underlying connection handling
- * @see weather_server.h for the parent server that manages instances
+ * @see http_server_connection.h för den underliggande anslutningshanteringen
+ * @see weather_server.h för den överordnade servern som hanterar instanser
  */
 
 #ifndef WEATHER_SERVER_INSTANCE_H
@@ -30,37 +30,37 @@
 #include "http_server_connection.h"
 
 /**
- * @brief Weather server instance for handling a single HTTP connection.
+ * @brief Väderserverinstans för hantering av en enskild HTTP-anslutning.
  *
- * Wraps an HTTPServerConnection and provides request routing and
- * response generation for weather API endpoints.
+ * Omsluter en HTTPServerConnection och tillhandahåller förfrågningsrouting
+ * och responsgenerering för väder-API-endpoints.
  */
 typedef struct {
-    /** @brief Pointer to the underlying HTTP connection. */
+    /** @brief Pekare till den underliggande HTTP-anslutningen. */
     HTTPServerConnection* connection;
 } WeatherServerInstance;
 
 /**
- * @brief Initialize a stack-allocated WeatherServerInstance.
+ * @brief Initiera en stackallokerad WeatherServerInstance.
  *
- * Associates the instance with the given HTTP connection and registers
- * the request callback handler for processing incoming HTTP requests.
+ * Kopplar instansen till den angivna HTTP-anslutningen och registrerar
+ * förfrågnings-callback-hanteraren för bearbetning av inkommande HTTP-förfrågningar.
  *
- * @param[in,out] instance   Pointer to the WeatherServerInstance to initialize.
- *                           Must be valid, non-NULL memory.
- * @param[in]     connection Pointer to the HTTPServerConnection to handle.
- *                           The instance does not take ownership.
+ * @param[in,out] instance   Pekare till WeatherServerInstance som ska initieras.
+ *                           Måste vara giltig, icke-NULL minnesadress.
+ * @param[in]     connection Pekare till HTTPServerConnection som ska hanteras.
+ *                           Instansen tar inte äganderätt.
  *
- * @return 0 on success, non-zero on failure.
+ * @return 0 vid framgång, icke-noll vid fel.
  *
- * @note The instance must be disposed with weather_server_instance_dispose()
- *       when no longer needed.
+ * @note Instansen måste avslutas med weather_server_instance_dispose()
+ *       när den inte längre behövs.
  *
- * @par Example:
+ * @par Exempel:
  * @code{.c}
  * WeatherServerInstance instance;
  * if (weather_server_instance_initiate(&instance, connection) == 0) {
- *     // Instance is ready to handle requests
+ *     // Instansen är redo att hantera förfrågningar
  *     weather_server_instance_dispose(&instance);
  * }
  * @endcode
@@ -69,30 +69,30 @@ int weather_server_instance_initiate(WeatherServerInstance* instance,
                                      HTTPServerConnection*  connection);
 
 /**
- * @brief Allocate and initialize a WeatherServerInstance dynamically.
+ * @brief Allokera och initiera en WeatherServerInstance dynamiskt.
  *
- * Allocates memory for a WeatherServerInstance, initializes it using
- * weather_server_instance_initiate(), and sets the output pointer.
- * On initialization failure, the allocated memory is automatically freed.
+ * Allokerar minne för en WeatherServerInstance, initierar den med
+ * weather_server_instance_initiate() och sätter utdatapekaren.
+ * Vid misslyckad initiering frigörs det allokerade minnet automatiskt.
  *
- * @param[in]  connection   Pointer to the HTTPServerConnection to handle.
- * @param[out] instance_ptr Pointer to receive the allocated instance.
- *                          Set to the new instance on success.
+ * @param[in]  connection   Pekare till HTTPServerConnection som ska hanteras.
+ * @param[out] instance_ptr Pekare som tar emot den allokerade instansen.
+ *                          Sätts till den nya instansen vid framgång.
  *
  * @return
- * - 0 on success
- * - -1 if instance_ptr is NULL
- * - -2 if memory allocation fails
- * - Other non-zero values from weather_server_instance_initiate()
+ * - 0 vid framgång
+ * - -1 om instance_ptr är NULL
+ * - -2 om minnesallokering misslyckas
+ * - Andra icke-nollvärden från weather_server_instance_initiate()
  *
- * @note The instance must be disposed with
- * weather_server_instance_dispose_ptr() when no longer needed.
+ * @note Instansen måste avslutas med
+ * weather_server_instance_dispose_ptr() när den inte längre behövs.
  *
- * @par Example:
+ * @par Exempel:
  * @code{.c}
  * WeatherServerInstance* instance = NULL;
  * if (weather_server_instance_initiate_ptr(connection, &instance) == 0) {
- *     // Instance is ready
+ *     // Instansen är redo
  *     weather_server_instance_dispose_ptr(&instance);
  * }
  * @endcode
@@ -101,53 +101,53 @@ int weather_server_instance_initiate_ptr(HTTPServerConnection*   connection,
                                          WeatherServerInstance** instance_ptr);
 
 /**
- * @brief Periodic work function for the instance.
+ * @brief Periodisk arbetsfunktion för instansen.
  *
- * Called by the WeatherServer scheduler task for each active instance.
- * Can be used for implementing timeouts, connection cleanup, or other
- * periodic maintenance tasks.
+ * Anropas av WeatherServer-schemaläggaren för varje aktiv instans.
+ * Kan användas för att implementera timeouts, anslutningsrensning eller
+ * andra periodiska underhållsuppgifter.
  *
- * @param[in] instance Pointer to the WeatherServerInstance.
- * @param[in] mon_time Current scheduler time in ticks.
+ * @param[in] instance Pekare till WeatherServerInstance.
+ * @param[in] mon_time Aktuell schemaläggartid i tick.
  *
- * @note Currently a no-op, reserved for future functionality such as
- *       request timeouts or keep-alive management.
+ * @note Är för närvarande en no-op, reserverad för framtida funktionalitet
+ *       såsom förfrågnings-timeouts eller keep-alive-hantering.
  */
 void weather_server_instance_work(WeatherServerInstance* instance,
                                   uint64_t               mon_time);
 
 /**
- * @brief Dispose of a stack-allocated WeatherServerInstance.
+ * @brief Avsluta en stackallokerad WeatherServerInstance.
  *
- * Releases any resources owned by the instance, such as temporary
- * buffers or timers. The underlying connection is not disposed
- * (it is owned by the HTTP server).
+ * Frigör resurser som ägs av instansen, såsom tillfälliga buffertar
+ * eller timers. Den underliggande anslutningen avslutas inte
+ * (den ägs av HTTP-servern).
  *
- * @param[in] instance Pointer to the WeatherServerInstance to dispose.
+ * @param[in] instance Pekare till WeatherServerInstance som ska avslutas.
  *
- * @note Currently a no-op, reserved for future cleanup logic.
- * @note After calling this function, the instance should not be used
- *       unless re-initialized.
+ * @note Är för närvarande en no-op, reserverad för framtida rensningslogik.
+ * @note Efter anrop till denna funktion bör instansen inte användas
+ *       utan att återinitieras.
  */
 void weather_server_instance_dispose(WeatherServerInstance* instance);
 
 /**
- * @brief Dispose and free a dynamically allocated WeatherServerInstance.
+ * @brief Avsluta och frigör en dynamiskt allokerad WeatherServerInstance.
  *
- * Calls weather_server_instance_dispose() to clean up the instance,
- * then frees the allocated memory and sets the pointer to NULL.
+ * Anropar weather_server_instance_dispose() för att rensa instansen,
+ * frigör sedan det allokerade minnet och sätter pekaren till NULL.
  *
- * @param[in,out] instance_ptr Pointer to the WeatherServerInstance pointer.
- *                             The pointed-to pointer is set to NULL after
- * disposal. Safe to call with NULL or pointer to NULL.
+ * @param[in,out] instance_ptr Pekare till WeatherServerInstance-pekaren.
+ *                             Den pekade pekaren sätts till NULL efter avslut.
+ *                             Säkert att anropa med NULL eller pekare till NULL.
  *
- * @par Example:
+ * @par Exempel:
  * @code{.c}
  * WeatherServerInstance* instance = NULL;
  * weather_server_instance_initiate_ptr(connection, &instance);
- * // Use instance...
+ * // Använd instansen...
  * weather_server_instance_dispose_ptr(&instance);
- * // instance is now NULL
+ * // instance är nu NULL
  * @endcode
  */
 void weather_server_instance_dispose_ptr(WeatherServerInstance** instance_ptr);

@@ -41,7 +41,7 @@ More symmlinks may be added in the future.
 
 3. Run the server:
 ```bash
-make run-server
+make rmakeun-server
 ```
 
 Binaries will be created in:

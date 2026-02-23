@@ -1,8 +1,8 @@
 /**
  * @file weather_client.h
- * @brief Async Weather API Client
+ * @brief Asynkron väder-API-klient
  *
- * Minimal async C client for weather API with forecast support.
+ * Minimal asynkron C-klient för väder-API med prognosstöd.
  */
 
 #ifndef WEATHER_CLIENT_H
@@ -12,16 +12,16 @@
 #include <stdint.h>
 
 /**
- * @brief Callback function type for async weather responses
- * @param response JSON response string (caller must free)
- * @param status_code HTTP status code
- * @param user_data User-provided context data
+ * @brief Callback-funktionstyp för asynkrona vädersvar
+ * @param response JSON-svarssträng (anroparen måste frigöra)
+ * @param status_code HTTP-statuskod
+ * @param user_data Användardefinierad kontextdata
  */
 typedef void (*WeatherCallback)(char* response, int status_code,
                                 void* user_data);
 
 /**
- * @brief Request state for state machine worker
+ * @brief Förfrågningstillstånd för tillståndsmaskinarbetare
  */
 typedef enum {
     REQ_STATE_IDLE = 0,
@@ -35,7 +35,7 @@ typedef enum {
 } RequestState;
 
 /**
- * @brief Async weather request context
+ * @brief Asynkront väderförfrågningskontext
  */
 typedef struct {
     char*           base_url;
@@ -48,58 +48,58 @@ typedef struct {
 } WeatherRequest;
 
 /**
- * @brief Initialize the weather client
- * @param base_url Base API URL (e.g., "http://localhost:10680/v1")
- * @return 0 on success, -1 on error
+ * @brief Initiera väderklienten
+ * @param base_url Bas-API-URL (t.ex., "http://localhost:10680/v1")
+ * @return 0 vid framgång, -1 vid fel
  */
 int weather_client_init(const char* base_url);
 
 /**
- * @brief Fetch current weather asynchronously
- * @param city City name
- * @param country_code ISO country code (e.g., "SE")
- * @param callback Response callback
- * @param user_data User context
- * @return 0 on success, -1 on error
+ * @brief Hämta aktuellt väder asynkront
+ * @param city Stadsnamn
+ * @param country_code ISO-landskod (t.ex., "SE")
+ * @param callback Svars-callback
+ * @param user_data Användarkontext
+ * @return 0 vid framgång, -1 vid fel
  */
 int weather_client_current_async(const char* city, const char* country_code,
                                  WeatherCallback callback, void* user_data);
 
 /**
- * @brief Fetch weather forecast asynchronously
- * @param city City name
- * @param country_code ISO country code (e.g., "SE")
- * @param days Number of forecast days (1-16)
- * @param callback Response callback
- * @param user_data User context
- * @return 0 on success, -1 on error
+ * @brief Hämta väderprognos asynkront
+ * @param city Stadsnamn
+ * @param country_code ISO-landskod (t.ex., "SE")
+ * @param days Antal prognodagar (1-16)
+ * @param callback Svars-callback
+ * @param user_data Användarkontext
+ * @return 0 vid framgång, -1 vid fel
  */
 int weather_client_forecast_async(const char* city, const char* country_code,
                                   int days, WeatherCallback callback,
                                   void* user_data);
 
 /**
- * @brief Process pending async requests
- * @return Number of requests processed
+ * @brief Bearbeta väntande asynkrona förfrågningar
+ * @return Antal bearbetade förfrågningar
  */
 int weather_client_poll(void);
 
 /**
- * @brief State machine worker - process one step of each request
- * @param current_time Current time in milliseconds
- * @return Number of active requests
+ * @brief Tillståndsmaskinarbetare - bearbeta ett steg per förfrågan
+ * @param current_time Aktuell tid i millisekunder
+ * @return Antal aktiva förfrågningar
  */
 int weather_client_smw_work(uint64_t current_time);
 
 /**
- * @brief Get request state string
- * @param state Request state
- * @return Human-readable state name
+ * @brief Hämta förfrågningstillståndssträng
+ * @param state Förfrågningstillstånd
+ * @return Läsbart tillståndsnamn
  */
 const char* weather_client_get_state_name(RequestState state);
 
 /**
- * @brief Cleanup and shutdown client
+ * @brief Rensa och stäng av klienten
  */
 void weather_client_cleanup(void);
 

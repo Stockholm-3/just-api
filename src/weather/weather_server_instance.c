@@ -1,12 +1,12 @@
 /**
  * @file weather_server_instance.c
- * @brief Implementation of weather server instance and HTTP request routing.
+ * @brief Implementering av väderserverinstans och HTTP-förfrågningsrouting.
  *
- * This file implements the WeatherServerInstance lifecycle management and
- * the HTTP request handler that routes requests to appropriate endpoint
- * handlers based on the URL path.
+ * Denna fil implementerar WeatherServerInstance-livscykelhantering och
+ * HTTP-förfrågningshanteraren som router förfrågningar till lämpliga
+ * endpoint-hanterare baserat på URL-sökvägen.
  *
- * @see weather_server_instance.h for the public interface
+ * @see weather_server_instance.h för det publika gränssnittet
  */
 
 #include "weather_server_instance.h"
@@ -17,30 +17,30 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ============= Internal Function Declarations ============= */
+/* ============= Interna funktionsdeklarationer ============= */
 
 /**
- * @brief HTTP request callback handler.
+ * @brief HTTP-förfrågnings-callback-hanterare.
  * @internal
  *
- * Routes incoming HTTP requests to the appropriate endpoint handler
- * based on the request method and path.
+ * Router inkommande HTTP-förfrågningar till lämplig endpoint-hanterare
+ * baserat på förfrågningsmetod och sökväg.
  *
- * @param[in] context WeatherServerInstance pointer cast to void*.
+ * @param[in] context WeatherServerInstance-pekare castad till void*.
  *
- * @return 0 on success, -1 on fatal error.
+ * @return 0 vid framgång, -1 vid allvarligt fel.
  */
 int weather_server_instance_on_request(void* context);
 
-/* ============= Public API Implementation ============= */
+/* ============= Implementation av publikt API ============= */
 
 /**
- * @brief Initialize a WeatherServerInstance.
+ * @brief Initiera en WeatherServerInstance.
  *
- * @param[in,out] instance   Instance to initialize.
- * @param[in]     connection HTTP connection to associate.
+ * @param[in,out] instance   Instans som ska initieras.
+ * @param[in]     connection HTTP-anslutning att koppla till.
  *
- * @return 0 on success.
+ * @return 0 vid framgång.
  */
 int weather_server_instance_initiate(WeatherServerInstance* instance,
                                      HTTPServerConnection*  connection) {
@@ -53,12 +53,12 @@ int weather_server_instance_initiate(WeatherServerInstance* instance,
 }
 
 /**
- * @brief Allocate and initialize a WeatherServerInstance.
+ * @brief Allokera och initiera en WeatherServerInstance.
  *
- * @param[in]  connection   HTTP connection to handle.
- * @param[out] instance_ptr Pointer to receive the allocated instance.
+ * @param[in]  connection   HTTP-anslutning som ska hanteras.
+ * @param[out] instance_ptr Pekare som tar emot den allokerade instansen.
  *
- * @return 0 on success, -1 if instance_ptr is NULL, -2 if allocation fails.
+ * @return 0 vid framgång, -1 om instance_ptr är NULL, -2 om allokering misslyckas.
  */
 int weather_server_instance_initiate_ptr(HTTPServerConnection*   connection,
                                          WeatherServerInstance** instance_ptr) {
@@ -84,7 +84,7 @@ int weather_server_instance_initiate_ptr(HTTPServerConnection*   connection,
 }
 
 /**
- * @brief Callback from http_server_connection that handles all routes
+ * @brief Callback från http_server_connection som hanterar alla routes
  */
 int weather_server_instance_on_request(void* context) {
     WeatherServerInstance* inst = (WeatherServerInstance*)context;
@@ -106,32 +106,32 @@ int weather_server_instance_on_request(void* context) {
     return handle_not_found(conn, path);
 }
 
-/* ============= Lifecycle Functions ============= */
+/* ============= Livscykelfunktioner ============= */
 
 /**
- * @brief Periodic work function (currently no-op).
+ * @brief Periodisk arbetsfunktion (för närvarande no-op).
  *
- * @param[in] instance Instance to process.
- * @param[in] mon_time Current scheduler time.
+ * @param[in] instance Instans att bearbeta.
+ * @param[in] mon_time Aktuell schemaläggartid.
  */
 void weather_server_instance_work(WeatherServerInstance* instance,
                                   uint64_t               mon_time) {
-    /* Reserved for future timeout/cleanup logic */
+    /* Reserverad för framtida timeout/rensningslogik */
 }
 
 /**
- * @brief Dispose of a stack-allocated instance (currently no-op).
+ * @brief Avsluta en stackallokerad instans (för närvarande no-op).
  *
- * @param[in] instance Instance to dispose.
+ * @param[in] instance Instans som ska avslutas.
  */
 void weather_server_instance_dispose(WeatherServerInstance* instance) {
-    /* Reserved for future cleanup logic */
+    /* Reserverad för framtida rensningslogik */
 }
 
 /**
- * @brief Dispose and free a dynamically allocated instance.
+ * @brief Avsluta och frigör en dynamiskt allokerad instans.
  *
- * @param[in,out] instance_ptr Pointer to instance pointer (set to NULL).
+ * @param[in,out] instance_ptr Pekare till instanspekaren (sätts till NULL).
  */
 void weather_server_instance_dispose_ptr(WeatherServerInstance** instance_ptr) {
     if (instance_ptr == NULL || *(instance_ptr) == NULL) {

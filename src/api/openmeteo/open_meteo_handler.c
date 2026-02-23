@@ -1,12 +1,12 @@
 /**
  * @file open_meteo_handler.c
- * @brief Implementation of HTTP endpoint handler for Open-Meteo weather API.
+ * @brief Implementering av HTTP-endpoint-hanterare för Open-Meteo väder-API.
  *
- * This file implements the HTTP request handling logic for weather endpoints.
- * It processes incoming requests, interacts with the Open-Meteo API client,
- * and formats responses using the standardized response builder.
+ * Denna fil implementerar HTTP-förfrågningshanteringslogiken för väderendpoints.
+ * Den bearbetar inkommande förfrågningar, interagerar med Open-Meteo API-klienten,
+ * och formaterar svar med den standardiserade svarsbyggaren.
  *
- * @see open_meteo_handler.h for the public interface
+ * @see open_meteo_handler.h för det publika gränssnittet
  */
 
 #include "open_meteo_handler.h"
@@ -21,7 +21,7 @@
 #include <string.h>
 #include <time.h>
 
-/* ============= Internal Structures ============= */
+/* ============= Interna strukturer ============= */
 
 typedef struct {
     HTTPServerConnection* conn;
@@ -29,37 +29,37 @@ typedef struct {
     float                 lon;
 } AsyncHandlerContext;
 
-/* ============= Internal Function Declarations ============= */
+/* ============= Interna funktionsdeklarationer ============= */
 
 static void weather_fetch_callback(int status, WeatherData* data,
                                    void* context);
 
 /**
- * @brief Initialize the Open-Meteo handler module.
+ * @brief Initiera Open-Meteo-hanterarmodulen.
  *
- * Configures and initializes the Open-Meteo API client with caching enabled.
+ * Konfigurerar och initierar Open-Meteo API-klienten med cachelagring aktiverad.
  *
- * @return 0 on success, non-zero on failure.
+ * @return 0 vid framgång, icke-noll vid fel.
  */
 int open_meteo_handler_init(void) {
     WeatherConfig config = {.cache_dir = "./cache/weather_cache",
-                            .cache_ttl = 900, /* 15 minutes */
+                            .cache_ttl = 900, /* 15 minuter */
                             .use_cache = true};
 
     return open_meteo_api_init(&config);
 }
 
 /**
- * @brief Handle GET /v1/current endpoint request.
+ * @brief Hantera GET /v1/current endpoint-förfrågan.
  *
- * Parses latitude and longitude from query string, fetches current weather
- * data from Open-Meteo API, and builds a JSON response with weather details.
+ * Parsar latitud och longitud från frågesträng, hämtar aktuell väderdata
+ * från Open-Meteo API, och bygger ett JSON-svar med väderdetaljer.
  *
- * @param[in]  query_string  URL query parameters containing lat and lon.
- * @param[out] response_json Allocated JSON response string (caller frees).
- * @param[out] status_code   HTTP status code for the response.
+ * @param[in]  query_string  URL-frågeparametrar som innehåller lat och lon.
+ * @param[out] response_json Allokerad JSON-svarssträng (anroparen frigör).
+ * @param[out] status_code   HTTP-statuskod för svaret.
  *
- * @return 0 on success, -1 on error.
+ * @return 0 vid framgång, -1 vid fel.
  */
 int open_meteo_handler_current(const char* query_string, char** response_json,
                                int* status_code) {
@@ -70,7 +70,7 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
     *response_json = NULL;
     *status_code   = HTTP_INTERNAL_ERROR;
 
-    /* Parse query parameters */
+    /* Parsa frågeparametrar */
     float lat, lon;
     if (open_meteo_api_parse_query(query_string, &lat, &lon) != 0) {
         *response_json = response_builder_error(
@@ -81,11 +81,11 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
         return -1;
     }
 
-    /* Create location */
+    /* Skapa plats */
     Location location = {
         .latitude = lat, .longitude = lon, .name = "Query Location"};
 
-    /* Get current weather */
+    /* Hämta aktuellt väder */
     WeatherData* weather_data = NULL;
     int          result = open_meteo_api_get_current(&location, &weather_data);
 
@@ -98,10 +98,10 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
         return -1;
     }
 
-    /* Build structured JSON response */
+    /* Bygg strukturerat JSON-svar */
     json_t* data = json_object();
 
-    /* Weather data - add first (order matches documentation) */
+    /* Väderdata - lägg till först (ordningen matchar dokumentationen) */
     json_t* weather_obj = json_object();
     json_object_set_new(weather_obj, "temperature",
                         json_real(weather_data->temperature));
@@ -131,7 +131,7 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
     json_object_set_new(weather_obj, "pressure",
                         json_real(weather_data->pressure));
 
-    /* Format time as "YYYY-MM-DDTHH:MM" */
+    /* Formatera tid som "YYYY-MM-DDTHH:MM" */
     time_t     now     = time(NULL);
     struct tm* tm_info = localtime(&now);
     char       time_str[32];
@@ -140,16 +140,16 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
 
     json_object_set_new(data, "current_weather", weather_obj);
 
-    /* Location information - add last */
+    /* Platsinformation - lägg till sist */
     json_t* location_obj = json_object();
     json_object_set_new(location_obj, "latitude", json_real(lat));
     json_object_set_new(location_obj, "longitude", json_real(lon));
     json_object_set_new(data, "location", location_obj);
 
-    /* Cleanup weather data */
+    /* Rensa väderdata */
     open_meteo_api_free_current(weather_data);
 
-    /* Build standardized response */
+    /* Bygg standardiserat svar */
     *response_json = response_builder_success(data);
 
     if (!*response_json) {
@@ -163,18 +163,18 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
 }
 
 /**
- * @brief Clean up the Open-Meteo handler module.
+ * @brief Rensa Open-Meteo-hanterarmodulen.
  *
- * Releases all resources allocated by the underlying Open-Meteo API client.
+ * Frigör alla resurser som allokerats av den underliggande Open-Meteo API-klienten.
  */
 void open_meteo_handler_cleanup(void) { open_meteo_api_cleanup(); }
 
-/* ============= Async Handler Implementation ============= */
+/* ============= Implementering av asynkron hanterare ============= */
 
 /**
- * @brief Callback for async weather data retrieval.
+ * @brief Callback för asynkron hämtning av väderdata.
  *
- * Called when weather data is fetched. Builds and sends the HTTP response.
+ * Anropas när väderdata har hämtats. Bygger och skickar HTTP-svaret.
  */
 static void weather_fetch_callback(int status, WeatherData* data,
                                    void* context) {
@@ -185,7 +185,7 @@ static void weather_fetch_callback(int status, WeatherData* data,
     }
 
     if (status != 0 || !data) {
-        /* Error fetching weather data */
+        /* Fel vid hämtning av väderdata */
         char* error_json = response_builder_error(
             HTTP_INTERNAL_ERROR,
             response_builder_get_error_type(HTTP_INTERNAL_ERROR),
@@ -200,10 +200,10 @@ static void weather_fetch_callback(int status, WeatherData* data,
         return;
     }
 
-    /* Build structured JSON response */
+    /* Bygg strukturerat JSON-svar */
     json_t* response_data = json_object();
 
-    /* Weather data */
+    /* Väderdata */
     json_t* weather_obj = json_object();
     json_object_set_new(weather_obj, "temperature",
                         json_real(data->temperature));
@@ -230,7 +230,7 @@ static void weather_fetch_callback(int status, WeatherData* data,
     json_object_set_new(weather_obj, "humidity", json_real(data->humidity));
     json_object_set_new(weather_obj, "pressure", json_real(data->pressure));
 
-    /* Format time */
+    /* Formatera tid */
     time_t     now     = time(NULL);
     struct tm* tm_info = localtime(&now);
     char       time_str[32];
@@ -239,13 +239,13 @@ static void weather_fetch_callback(int status, WeatherData* data,
 
     json_object_set_new(response_data, "current_weather", weather_obj);
 
-    /* Location information */
+    /* Platsinformation */
     json_t* location_obj = json_object();
     json_object_set_new(location_obj, "latitude", json_real(ctx->lat));
     json_object_set_new(location_obj, "longitude", json_real(ctx->lon));
     json_object_set_new(response_data, "location", location_obj);
 
-    /* Build standardized response */
+    /* Bygg standardiserat svar */
     char* response_json = response_builder_success(response_data);
 
     if (response_json) {
@@ -265,13 +265,13 @@ static void weather_fetch_callback(int status, WeatherData* data,
         }
     }
 
-    /* Cleanup */
+    /* Rensa */
     open_meteo_api_free_current(data);
     free(ctx);
 }
 
 /**
- * @brief Handle GET /v1/current endpoint request (async version).
+ * @brief Hantera GET /v1/current endpoint-förfrågan (asynkron version).
  */
 int open_meteo_handler_current_async(HTTPServerConnection* conn,
                                      const char*           query_string) {
@@ -279,7 +279,7 @@ int open_meteo_handler_current_async(HTTPServerConnection* conn,
         return -1;
     }
 
-    /* Parse query parameters */
+    /* Parsa frågeparametrar */
     float lat, lon;
     if (open_meteo_api_parse_query(query_string, &lat, &lon) != 0) {
         char* error_json = response_builder_error(
@@ -295,7 +295,7 @@ int open_meteo_handler_current_async(HTTPServerConnection* conn,
         return -1;
     }
 
-    /* Create context for callback */
+    /* Skapa kontext för callback */
     AsyncHandlerContext* ctx = malloc(sizeof(AsyncHandlerContext));
     if (!ctx) {
         char* error_json = response_builder_error(
@@ -315,11 +315,11 @@ int open_meteo_handler_current_async(HTTPServerConnection* conn,
     ctx->lat  = lat;
     ctx->lon  = lon;
 
-    /* Create location */
+    /* Skapa plats */
     Location location = {
         .latitude = lat, .longitude = lon, .name = "Query Location"};
 
-    /* Get current weather async */
+    /* Hämta aktuellt väder asynkront */
     int result = open_meteo_api_get_current_async(&location,
                                                   weather_fetch_callback, ctx);
 

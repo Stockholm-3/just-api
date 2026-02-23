@@ -1,18 +1,18 @@
 /**
  * @file open_meteo_handler.h
- * @brief HTTP endpoint handler for Open-Meteo weather API requests.
+ * @brief HTTP-endpoint-hanterare för Open-Meteo väder-API-förfrågningar.
  *
- * This module provides HTTP request handling for weather data endpoints.
- * It acts as a bridge between the HTTP server and the Open-Meteo API client,
- * parsing incoming requests and formatting weather data responses.
+ * Denna modul tillhandahåller HTTP-förfrågningshantering för väderdataendpoints.
+ * Den fungerar som en brygga mellan HTTP-servern och Open-Meteo API-klienten,
+ * parsar inkommande förfrågningar och formaterar väderdatasvar.
  *
- * The handler supports the following endpoint:
- * - GET /v1/current - Returns current weather data for specified coordinates
+ * Hanteraren stöder följande endpoint:
+ * - GET /v1/current - Returnerar aktuell väderdata för angivna koordinater
  *
- * @note This module must be initialized before use and cleaned up on shutdown.
+ * @note Denna modul måste initieras innan användning och rensas vid avslut.
  *
- * @see open_meteo_api.h for the underlying API client
- * @see response_builder.h for JSON response formatting
+ * @see open_meteo_api.h för den underliggande API-klienten
+ * @see response_builder.h för JSON-svarsformatering
  */
 
 #ifndef OPEN_METEO_HANDLER_H
@@ -21,43 +21,42 @@
 #include "http_server_connection.h"
 
 /**
- * @brief Initialize the Open-Meteo handler module.
+ * @brief Initiera Open-Meteo-hanterarmodulen.
  *
- * Initializes the underlying Open-Meteo API client with default configuration:
- * - Cache directory: ./cache/weather_cache
- * - Cache TTL: 900 seconds (15 minutes)
- * - Caching enabled
+ * Initierar den underliggande Open-Meteo API-klienten med standardkonfiguration:
+ * - Cache-katalog: ./cache/weather_cache
+ * - Cache-TTL: 900 sekunder (15 minuter)
+ * - Cachelagring aktiverad
  *
- * This function must be called before any other handler functions.
+ * Denna funktion måste anropas innan några andra hanterarfunktioner.
  *
- * @return 0 on success, non-zero on initialization failure.
+ * @return 0 vid framgång, icke-noll vid initieringsfel.
  *
- * @note Thread-safety: Not thread-safe. Call only once at startup.
+ * @note Trådsäkerhet: Inte trådsäker. Anropa endast en gång vid uppstart.
  */
 int open_meteo_handler_init(void);
 
 /**
- * @brief Handle GET /v1/current endpoint request.
+ * @brief Hantera GET /v1/current endpoint-förfrågan.
  *
- * Processes a request for current weather data at specified coordinates.
- * Parses query parameters, fetches weather data from Open-Meteo API,
- * and builds a standardized JSON response.
+ * Bearbetar en förfrågan om aktuell väderdata för angivna koordinater.
+ * Parsar frågeparametrar, hämtar väderdata från Open-Meteo API,
+ * och bygger ett standardiserat JSON-svar.
  *
- * @param[in]  query_string  Query parameters string (e.g.,
- * "lat=37.7749&lon=-122.4194"). Must contain valid 'lat' and 'lon' parameters.
- * @param[out] response_json Pointer to receive the allocated JSON response
- * string. Caller is responsible for freeing this memory. Set to NULL on entry,
- * always set on return (even on error).
- * @param[out] status_code   Pointer to receive the HTTP status code.
- *                           Will be set to HTTP_OK (200), HTTP_BAD_REQUEST
- * (400), or HTTP_INTERNAL_ERROR (500).
+ * @param[in]  query_string  Frågeparametersträng (t.ex.,
+ * "lat=37.7749&lon=-122.4194"). Måste innehålla giltiga 'lat'- och 'lon'-parametrar.
+ * @param[out] response_json Pekare för att ta emot den allokerade JSON-svarssträngen.
+ * Anroparen ansvarar för att frigöra detta minne. Sätts till NULL vid ingång,
+ * alltid satt vid retur (även vid fel).
+ * @param[out] status_code   Pekare för att ta emot HTTP-statuskoden.
+ *                           Sätts till HTTP_OK (200), HTTP_BAD_REQUEST
+ * (400), eller HTTP_INTERNAL_ERROR (500).
  *
- * @return 0 on success, -1 on error.
+ * @return 0 vid framgång, -1 vid fel.
  *
- * @note On error, response_json will contain a properly formatted error
- * response.
+ * @note Vid fel kommer response_json att innehålla ett korrekt formaterat felsvar.
  *
- * @par Response Format (Success):
+ * @par Svarsformat (Framgång):
  * @code{.json}
  * {
  *   "success": true,
@@ -86,7 +85,7 @@ int open_meteo_handler_init(void);
  * }
  * @endcode
  *
- * @par Example Usage:
+ * @par Exempelanvändning:
  * @code{.c}
  * char* json = NULL;
  * int status = 0;
@@ -101,32 +100,32 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
                                int* status_code);
 
 /**
- * @brief Handle GET /v1/current endpoint request (async version).
+ * @brief Hantera GET /v1/current endpoint-förfrågan (asynkron version).
  *
- * Processes a request for current weather data at specified coordinates using
- * the async API. The response is sent directly to the connection via callback.
+ * Bearbetar en förfrågan om aktuell väderdata för angivna koordinater med
+ * det asynkrona API:et. Svaret skickas direkt till anslutningen via callback.
  *
- * @param[in] conn         HTTP server connection to send response to.
- * @param[in] query_string Query parameters string (e.g.,
+ * @param[in] conn         HTTP-serveranslutning att skicka svar till.
+ * @param[in] query_string Frågeparametersträng (t.ex.,
  * "lat=37.7749&lon=-122.4194").
  *
- * @return 0 on successful initiation, -1 on immediate error.
+ * @return 0 vid lyckad initiering, -1 vid omedelbart fel.
  *
- * @note This is the preferred async version. Responses are sent via callback.
+ * @note Detta är den rekommenderade asynkrona versionen. Svar skickas via callback.
  */
 int open_meteo_handler_current_async(HTTPServerConnection* conn,
                                      const char*           query_string);
 
 /**
- * @brief Clean up the Open-Meteo handler module.
+ * @brief Rensa Open-Meteo-hanterarmodulen.
  *
- * Releases all resources allocated by the handler, including
- * the underlying Open-Meteo API client resources and cache.
+ * Frigör alla resurser som allokerats av hanteraren, inklusive
+ * den underliggande Open-Meteo API-klientens resurser och cache.
  *
- * Should be called during server shutdown.
+ * Ska anropas vid serveravstängning.
  *
- * @note Thread-safety: Not thread-safe. Call only once at shutdown.
- * @note Safe to call even if init was not called or failed.
+ * @note Trådsäkerhet: Inte trådsäker. Anropa endast en gång vid avslut.
+ * @note Säkert att anropa även om init inte anropades eller misslyckades.
  */
 void open_meteo_handler_cleanup(void);
 

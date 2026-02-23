@@ -17,20 +17,20 @@ static FileCacheInstance* g_latest_cache     = NULL;
 static FileCacheInstance* g_historical_cache = NULL;
 
 /* ============================================================================
- * Swedish Time Utilities
+ * Svenska tidshjälpfunktioner
  * ========================================================================= */
 
 static int is_swedish_dst(const struct tm* utc) {
     int year = utc->tm_year + 1900;
 
-    /* Last Sunday of March */
+    /* Sista söndagen i mars */
     struct tm march = {
         .tm_year = year - 1900, .tm_mon = 2, .tm_mday = 31, .tm_hour = 1};
     mktime(&march);
     march.tm_mday -= march.tm_wday;
     time_t dst_start = mktime(&march);
 
-    /* Last Sunday of October */
+    /* Sista söndagen i oktober */
     struct tm october = {
         .tm_year = year - 1900, .tm_mon = 9, .tm_mday = 31, .tm_hour = 1};
     mktime(&october);
@@ -77,7 +77,7 @@ static void get_latest_date(unsigned int* year, unsigned int* month,
     struct tm se;
     swedish_time_now(&se);
 
-    /* After 13:00, tomorrow's prices */
+    /* Efter 13:00 visas morgondagens priser */
     if (se.tm_hour >= 13) {
         se.tm_mday += 1;
         mktime(&se);
@@ -89,7 +89,7 @@ static void get_latest_date(unsigned int* year, unsigned int* month,
 }
 
 /* ============================================================================
- * Cache Management
+ * Cachehantering
  * ========================================================================= */
 
 static FileCacheInstance* get_cache(unsigned int year, unsigned int month,
@@ -121,7 +121,7 @@ static FileCacheInstance* get_cache(unsigned int year, unsigned int month,
 }
 
 /* ============================================================================
- * Query Parsing
+ * Frågeparsning
  * ========================================================================= */
 
 typedef struct {
@@ -181,7 +181,7 @@ static ParsedQuery parse_query(const char* query) {
         return result;
     }
 
-    /* No date use latest */
+    /* Inget datum angivet — använd senaste */
     if (result.year == 0) {
         get_latest_date(&result.year, &result.month, &result.day);
     }
@@ -191,7 +191,7 @@ static ParsedQuery parse_query(const char* query) {
 }
 
 /* ============================================================================
- * Async HTTP Handling
+ * Asynkron HTTP-hantering
  * ========================================================================= */
 
 typedef struct {
@@ -211,17 +211,17 @@ static void on_http_response(const char* event, const char* response,
     if (strcmp(event, "RESPONSE") == 0 && response &&
         (response[0] == '[' || response[0] == '{')) {
 
-        /* Cache the response */
+        /* Cachelagra svaret */
         if (ctx->cache) {
             file_cache_save(ctx->cache, ctx->cache_key, response,
                             strlen(response));
         }
 
-        /* Send to client */
+        /* Skicka till klienten */
         send_response(ctx->conn, 200, "application/json", response,
                       strlen(response));
     } else {
-        /* Handle errors */
+        /* Hantera fel */
         if (strcmp(event, "ERROR") == 0) {
             printf("[ELPRIS] HTTP error: %s\n",
                    response ? response : "unknown");
@@ -240,7 +240,7 @@ static void on_http_response(const char* event, const char* response,
 }
 
 /* ============================================================================
- * Public API
+ * Publikt API
  * ========================================================================= */
 
 int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
@@ -249,7 +249,7 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
         return -1;
     }
 
-    /* Parse query */
+    /* Parsa frågan */
     ParsedQuery parsed = parse_query(query);
     if (!parsed.valid) {
         send_json_error(
@@ -259,17 +259,17 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
         return -1;
     }
 
-    /* Get cache */
+    /* Hämta cache */
     FileCacheInstance* cache = get_cache(parsed.year, parsed.month, parsed.day);
 
-    /* Build cache key */
+    /* Bygg cachenyckel */
     char key_input[128];
     snprintf(key_input, sizeof(key_input), "%04u-%02u-%02u-%s", parsed.year,
              parsed.month, parsed.day, parsed.price_group);
 
     char cache_key[FILE_CACHE_KEY_LENGTH] = {0};
 
-    /* Check cache */
+    /* Kontrollera cache */
     if (cache &&
         file_cache_generate_key(cache, key_input, cache_key,
                                 sizeof(cache_key)) == FILE_CACHE_OK &&
@@ -285,7 +285,7 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
         }
     }
 
-    /* Prepare async fetch */
+    /* Förbered asynkron hämtning */
     FetchContext* ctx = malloc(sizeof(FetchContext));
     if (!ctx) {
         send_json_error(conn, 500, "Memory allocation failed");

@@ -1,26 +1,26 @@
 /**
  * @file weather_location_handler.h
- * @brief Combined handler for geocoding and weather API integration.
+ * @brief Kombinerad hanterare för geokodnings- och väder-API-integration.
  *
- * This module provides a high-level API for retrieving weather data by city
- * name. It serves as a wrapper over the geocoding_api and open_meteo_api
- * modules, combining their functionality into convenient endpoint handlers.
+ * Denna modul tillhandahåller ett högnivå-API för att hämta väderdata via stadsnamn.
+ * Den fungerar som en omslagarfunktion över geocoding_api och open_meteo_api-modulerna,
+ * och kombinerar deras funktionalitet till praktiska endpoint-hanterare.
  *
- * The module supports two main endpoints:
- * - GET /v1/weather - Weather by city name (geocoding + weather lookup)
- * - GET /v1/cities - City search for autocomplete functionality
+ * Modulen stöder två huvud-endpoints:
+ * - GET /v1/weather - Väder via stadsnamn (geokodning + vädersökning)
+ * - GET /v1/cities - Stadssökning för autocomplete-funktionalitet
  *
- * @par Features:
- * - Lazy initialization (modules are initialized on first request)
- * - Support for city, country, and region parameters
- * - URL decoding for query parameters
- * - Integration with popular cities database for fast lookups
+ * @par Funktioner:
+ * - Lat initiering (moduler initieras vid första förfrågan)
+ * - Stöd för stad-, land- och regionparametrar
+ * - URL-avkodning för frågeparametrar
+ * - Integration med populära städer-databas för snabba sökningar
  *
- * @note This module handles initialization of both geocoding and weather APIs.
+ * @note Denna modul hanterar initiering av både geokodnings- och väder-API:er.
  *
- * @see geocoding_api.h for the geocoding client
- * @see open_meteo_api.h for the weather data client
- * @see open_meteo_handler.h for coordinate-based weather requests
+ * @see geocoding_api.h för geokodningsklienten
+ * @see open_meteo_api.h för väderdataklienten
+ * @see open_meteo_handler.h för koordinatbaserade väderförfrågningar
  */
 
 #ifndef WEATHER_LOCATION_HANDLER_H
@@ -29,46 +29,46 @@
 #include "http_server_connection.h"
 
 /**
- * @brief Initialize the weather location handler.
+ * @brief Initiera väderplatshanteraren.
  *
- * Performs explicit initialization of all dependent modules:
- * - Open-Meteo weather API client
- * - Geocoding API client
- * - Popular cities database (optional, non-critical)
+ * Utför explicit initiering av alla beroende moduler:
+ * - Open-Meteo väder-API-klient
+ * - Geokodnings-API-klient
+ * - Populära städer-databas (valfri, icke-kritisk)
  *
- * This function is optional as initialization also happens lazily
- * on the first request.
+ * Denna funktion är valfri eftersom initiering också sker lazily
+ * vid den första förfrågan.
  *
- * @return 0 on success, non-zero on failure.
+ * @return 0 vid framgång, icke-noll vid fel.
  *
- * @note Thread-safety: Not thread-safe. Call once at startup if explicit
- *       initialization is needed.
+ * @note Trådsäkerhet: Inte trådsäker. Anropa en gång vid uppstart om explicit
+ *       initiering behövs.
  */
 int weather_location_handler_init(void);
 
 /**
- * @brief Handle weather request by city name.
+ * @brief Hantera väderförfrågan via stadsnamn.
  *
- * Processes a weather request by:
- * 1. Parsing city, country, and region from query parameters
- * 2. Looking up coordinates via the geocoding API
- * 3. Fetching weather data for the found coordinates
- * 4. Building a combined JSON response with location and weather info
+ * Bearbetar en väderförfrågan genom att:
+ * 1. Parsa stad, land och region från frågeparametrar
+ * 2. Slå upp koordinater via geokodnings-API:et
+ * 3. Hämta väderdata för de hittade koordinaterna
+ * 4. Bygga ett kombinerat JSON-svar med plats- och väderinformation
  *
  * @par Endpoint:
- * GET /v1/weather?city=<name>&country=<code>
- * GET /v1/weather?city=<name>&region=<region>&country=<code>
+ * GET /v1/weather?city=<namn>&country=<kod>
+ * GET /v1/weather?city=<namn>&region=<region>&country=<kod>
  *
- * @param[in]  query_string  URL query parameters. Required: city.
- *                           Optional: country (ISO code), region.
- * @param[out] response_json Pointer to receive allocated JSON response.
- *                           Caller must free this memory.
- * @param[out] status_code   Pointer to receive HTTP status code.
- *                           Possible values: 200, 400, 404, 500.
+ * @param[in]  query_string  URL-frågeparametrar. Krävs: city.
+ *                           Valfritt: country (ISO-kod), region.
+ * @param[out] response_json Pekare för att ta emot allokerat JSON-svar.
+ *                           Anroparen måste frigöra detta minne.
+ * @param[out] status_code   Pekare för att ta emot HTTP-statuskod.
+ *                           Möjliga värden: 200, 400, 404, 500.
  *
- * @return 0 on success, -1 on error (response_json will contain error details).
+ * @return 0 vid framgång, -1 vid fel (response_json innehåller feldetaljer).
  *
- * @par Response Format (Success):
+ * @par Svarsformat (Framgång):
  * @code{.json}
  * {
  *   "success": true,
@@ -94,7 +94,7 @@ int weather_location_handler_init(void);
  * }
  * @endcode
  *
- * @par Examples:
+ * @par Exempel:
  * @code
  * /v1/weather?city=Kyiv&country=UA
  * /v1/weather?city=Stockholm
@@ -105,40 +105,39 @@ int weather_location_handler_by_city(const char* query_string,
                                      char** response_json, int* status_code);
 
 /**
- * @brief Handle weather request by city name (async version).
+ * @brief Hantera väderförfrågan via stadsnamn (asynkron version).
  *
- * Async version that sends the response directly via the connection.
+ * Asynkron version som skickar svaret direkt via anslutningen.
  *
- * @param[in] conn         HTTP server connection to send response to.
- * @param[in] query_string URL query parameters.
+ * @param[in] conn         HTTP-serveranslutning att skicka svar till.
+ * @param[in] query_string URL-frågeparametrar.
  *
- * @return 0 on successful initiation, -1 on immediate error.
+ * @return 0 vid lyckad initiering, -1 vid omedelbart fel.
  */
 int weather_location_handler_by_city_async(HTTPServerConnection* conn,
                                            const char*           query_string);
 
 /**
- * @brief Handle city search request for autocomplete.
+ * @brief Hantera stadssökningsförfrågan för autocomplete.
  *
- * Searches for cities matching the provided query string using a
- * three-tier strategy for optimal performance:
- * 1. Popular Cities DB (in-memory, fastest)
- * 2. File cache (fast)
- * 3. Open-Meteo Geocoding API (slowest, uses network quota)
+ * Söker efter städer som matchar den angivna frågesträngen med en
+ * tre-nivå-strategi för optimal prestanda:
+ * 1. Populära städer-DB (i minnet, snabbast)
+ * 2. Filcache (snabb)
+ * 3. Open-Meteo Geocoding API (långsammast, använder nätverkskvot)
  *
  * @par Endpoint:
- * GET /v1/cities?query=<search>
+ * GET /v1/cities?query=<sökning>
  *
- * @param[in]  query_string  URL query parameters. Required: query (min 2
- * chars).
- * @param[out] response_json Pointer to receive allocated JSON response
- *                           containing list of matching cities.
- *                           Caller must free this memory.
- * @param[out] status_code   Pointer to receive HTTP status code.
+ * @param[in]  query_string  URL-frågeparametrar. Krävs: query (min 2 tecken).
+ * @param[out] response_json Pekare för att ta emot allokerat JSON-svar
+ *                           innehållande lista med matchande städer.
+ *                           Anroparen måste frigöra detta minne.
+ * @param[out] status_code   Pekare för att ta emot HTTP-statuskod.
  *
- * @return 0 on success, -1 on error.
+ * @return 0 vid framgång, -1 vid fel.
  *
- * @par Response Format (Success):
+ * @par Svarsformat (Framgång):
  * @code{.json}
  * {
  *   "success": true,
@@ -161,7 +160,7 @@ int weather_location_handler_by_city_async(HTTPServerConnection* conn,
  * }
  * @endcode
  *
- * @par Example:
+ * @par Exempel:
  * @code
  * /v1/cities?query=Kyiv
  * @endcode
@@ -171,16 +170,16 @@ int weather_location_handler_search_cities(const char* query_string,
                                            int*        status_code);
 
 /**
- * @brief Clean up the weather location handler.
+ * @brief Rensa väderplatshanteraren.
  *
- * Releases all resources allocated by the handler and its dependencies:
- * - Geocoding API client
- * - Weather API handler
- * - Popular cities database
+ * Frigör alla resurser som allokerats av hanteraren och dess beroenden:
+ * - Geokodnings-API-klient
+ * - Väder-API-hanterare
+ * - Populära städer-databas
  *
- * Safe to call even if the handler was never initialized.
+ * Säkert att anropa även om hanteraren aldrig initierades.
  *
- * @note Thread-safety: Not thread-safe. Call once during shutdown.
+ * @note Trådsäkerhet: Inte trådsäker. Anropa en gång vid avslut.
  */
 void weather_location_handler_cleanup(void);
 

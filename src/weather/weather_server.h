@@ -1,28 +1,28 @@
 /**
  * @file weather_server.h
- * @brief Weather HTTP server main module.
+ * @brief Huvudmodul för väder-HTTP-servern.
  *
- * This module provides the main WeatherServer structure and lifecycle
- * management functions. The WeatherServer wraps an HTTP server and
- * manages multiple client connections through WeatherServerInstance objects.
+ * Denna modul tillhandahåller WeatherServer-strukturen och
+ * livscykelhanteringsfunktioner. WeatherServer omsluter en HTTP-server och
+ * hanterar flera klientanslutningar via WeatherServerInstance-objekt.
  *
- * @par Architecture:
- * - WeatherServer contains an HTTPServer for handling TCP connections
- * - Each client connection creates a WeatherServerInstance
- * - A scheduler task performs periodic work on all active instances
- * - Instances are stored in a linked list for iteration
+ * @par Arkitektur:
+ * - WeatherServer innehåller en HTTPServer för hantering av TCP-anslutningar
+ * - Varje klientanslutning skapar en WeatherServerInstance
+ * - En schemaläggare utför periodiskt arbete på alla aktiva instanser
+ * - Instanser lagras i en länkad lista för iteration
  *
- * @par Usage:
+ * @par Användning:
  * @code{.c}
  * WeatherServer* server = NULL;
  * if (weather_server_initiate_ptr(&server) == 0) {
- *     // Server is running, handle events...
+ *     // Servern är igång, hantera händelser...
  *     weather_server_dispose_ptr(&server);
  * }
  * @endcode
  *
- * @see weather_server_instance.h for individual connection handling
- * @see http_server.h for the underlying HTTP server implementation
+ * @see weather_server_instance.h för hantering av enskilda anslutningar
+ * @see http_server.h för den underliggande HTTP-serverimplementationen
  */
 
 #ifndef WEATHER_SERVER_H
@@ -33,43 +33,43 @@
 #include "smw.h"
 
 /**
- * @brief Main weather server structure.
+ * @brief Huvudstruktur för väderservern.
  *
- * Contains the HTTP server, connection instances, and scheduler task
- * for managing the weather API server.
+ * Innehåller HTTP-servern, anslutningsinstanser och schemaläggningsuppgift
+ * för hantering av väder-API-servern.
  */
 typedef struct {
-    /** @brief Embedded HTTP server for handling connections. */
+    /** @brief Inbäddad HTTP-server för hantering av anslutningar. */
     HTTPServer httpServer;
 
-    /** @brief Linked list of active WeatherServerInstance pointers. */
+    /** @brief Länkad lista med aktiva WeatherServerInstance-pekare. */
     LinkedList* instances;
 
-    /** @brief Scheduler task for periodic instance work. */
+    /** @brief Schemaläggningsuppgift för periodiskt instansarbete. */
     SmwTask* task;
 
 } WeatherServer;
 
 /**
- * @brief Initialize a stack-allocated WeatherServer.
+ * @brief Initiera en stackallokerad WeatherServer.
  *
- * Performs complete initialization of the weather server:
- * - Initializes the embedded HTTP server with connection callback
- * - Creates an empty linked list for client instances
- * - Registers a scheduler task for periodic work
+ * Utför fullständig initiering av väderservern:
+ * - Initierar den inbäddade HTTP-servern med anslutningscallback
+ * - Skapar en tom länkad lista för klientinstanser
+ * - Registrerar en schemaläggningsuppgift för periodiskt arbete
  *
- * @param[in,out] server Pointer to the WeatherServer structure to initialize.
- *                       Must be valid, non-NULL memory.
+ * @param[in,out] server Pekare till WeatherServer-strukturen som ska initieras.
+ *                       Måste vara giltig, icke-NULL minnesadress.
  *
- * @return 0 on success, non-zero on failure.
+ * @return 0 vid framgång, icke-noll vid fel.
  *
- * @note The server must be disposed with weather_server_dispose() when done.
+ * @note Servern måste avslutas med weather_server_dispose() när den är klar.
  *
- * @par Example:
+ * @par Exempel:
  * @code{.c}
  * WeatherServer server;
  * if (weather_server_initiate(&server) == 0) {
- *     // Use server...
+ *     // Använd servern...
  *     weather_server_dispose(&server);
  * }
  * @endcode
@@ -77,31 +77,31 @@ typedef struct {
 int weather_server_initiate(WeatherServer* server);
 
 /**
- * @brief Allocate and initialize a WeatherServer dynamically.
+ * @brief Allokera och initiera en WeatherServer dynamiskt.
  *
- * Allocates memory for a WeatherServer and initializes it using
- * weather_server_initiate(). On initialization failure, the allocated
- * memory is automatically freed.
+ * Allokerar minne för en WeatherServer och initierar den med
+ * weather_server_initiate(). Vid misslyckad initiering frigörs
+ * det allokerade minnet automatiskt.
  *
- * @param[out] server_ptr Pointer to receive the allocated server.
- *                        Set to the new server on success, unchanged on
- * failure.
+ * @param[out] server_ptr Pekare som tar emot den allokerade servern.
+ *                        Sätts till den nya servern vid framgång, oförändrad
+ * vid fel.
  *
  * @return
- * - 0 on success
- * - -1 if server_ptr is NULL
- * - -2 if memory allocation fails
- * - Other non-zero values from weather_server_initiate() on init failure
+ * - 0 vid framgång
+ * - -1 om server_ptr är NULL
+ * - -2 om minnesallokering misslyckas
+ * - Andra icke-nollvärden från weather_server_initiate() vid initieringsfel
  *
- * @note The server must be disposed with weather_server_dispose_ptr() when
- * done.
+ * @note Servern måste avslutas med weather_server_dispose_ptr() när den är
+ * klar.
  *
- * @par Example:
+ * @par Exempel:
  * @code{.c}
  * WeatherServer* server = NULL;
  * int result = weather_server_initiate_ptr(&server);
  * if (result == 0) {
- *     // Use server...
+ *     // Använd servern...
  *     weather_server_dispose_ptr(&server);
  * }
  * @endcode
@@ -109,39 +109,39 @@ int weather_server_initiate(WeatherServer* server);
 int weather_server_initiate_ptr(WeatherServer** server_ptr);
 
 /**
- * @brief Shut down and clean up a stack-allocated WeatherServer.
+ * @brief Stäng av och rensa upp en stackallokerad WeatherServer.
  *
- * Performs complete cleanup of the weather server:
- * - Disposes all active client instances
- * - Frees the instances linked list
- * - Stops and disposes the HTTP server
- * - Destroys the scheduler task
+ * Utför fullständig rensning av väderservern:
+ * - Avslutar alla aktiva klientinstanser
+ * - Frigör instansernas länkade lista
+ * - Stoppar och avslutar HTTP-servern
+ * - Förstör schemaläggningsuppgiften
  *
- * @param[in] server Pointer to the WeatherServer to dispose.
- *                   Must have been initialized with weather_server_initiate().
+ * @param[in] server Pekare till WeatherServer som ska avslutas.
+ *                   Måste ha initierats med weather_server_initiate().
  *
- * @note After calling this function, the server structure should not be used
- *       unless re-initialized.
+ * @note Efter anrop till denna funktion bör serverstrukturen inte användas
+ *       utan att återinitieras.
  */
 void weather_server_dispose(WeatherServer* server);
 
 /**
- * @brief Dispose and free a dynamically allocated WeatherServer.
+ * @brief Avsluta och frigör en dynamiskt allokerad WeatherServer.
  *
- * Calls weather_server_dispose() to clean up the server, then frees
- * the allocated memory and sets the pointer to NULL.
+ * Anropar weather_server_dispose() för att rensa servern, frigör sedan
+ * det allokerade minnet och sätter pekaren till NULL.
  *
- * @param[in,out] server_ptr Pointer to the WeatherServer pointer.
- *                           The pointed-to pointer is set to NULL after
- * disposal. Safe to call with NULL or pointer to NULL.
+ * @param[in,out] server_ptr Pekare till WeatherServer-pekaren.
+ *                           Den pekade pekaren sätts till NULL efter avslut.
+ *                           Säkert att anropa med NULL eller pekare till NULL.
  *
- * @par Example:
+ * @par Exempel:
  * @code{.c}
  * WeatherServer* server = NULL;
  * weather_server_initiate_ptr(&server);
- * // Use server...
+ * // Använd servern...
  * weather_server_dispose_ptr(&server);
- * // server is now NULL
+ * // server är nu NULL
  * @endcode
  */
 void weather_server_dispose_ptr(WeatherServer** server_ptr);

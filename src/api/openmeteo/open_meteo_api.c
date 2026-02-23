@@ -8,22 +8,22 @@
 #include <string.h>
 #include <time.h>
 
-/* ============= Configuration ============= */
+/* ============= Konfiguration ============= */
 
 #define API_BASE_URL "http://api.open-meteo.com/v1/forecast"
 #define DEFAULT_CACHE_DIR "./cache/weather_cache"
-#define DEFAULT_CACHE_TTL 900 /* 15 minutes */
+#define DEFAULT_CACHE_TTL 900 /* 15 minuter */
 
-/* ============= Global State ============= */
+/* ============= Globalt tillstånd ============= */
 
 static WeatherConfig g_config = {.cache_dir = DEFAULT_CACHE_DIR,
                                  .cache_ttl = DEFAULT_CACHE_TTL,
                                  .use_cache = true};
 
-/* Cache instance */
+/* Cache-instans */
 static FileCacheInstance* g_weather_cache = NULL;
 
-/* ============= Internal Structures ============= */
+/* ============= Interna strukturer ============= */
 
 typedef struct {
     Location*          location;
@@ -34,7 +34,7 @@ typedef struct {
     char*              response_data;
 } AsyncWeatherContext;
 
-/* ============= Internal Functions ============= */
+/* ============= Interna funktioner ============= */
 
 static void  http_fetch_async_callback(const char* event, const char* response,
                                        void* context);
@@ -47,7 +47,7 @@ static char* build_api_url(float lat, float lon);
 static int   parse_weather_json(const char* json_str, WeatherData* data,
                                 float lat, float lon);
 
-/* ============= Weather Code Descriptions ============= */
+/* ============= Väderkodsbeskrivningar ============= */
 
 static const struct {
     int         code;
@@ -78,7 +78,7 @@ static const struct {
                             {99, "Thunderstorm with heavy hail"},
                             {-1, "Unknown"}};
 
-/* ============= Wind Direction Cardinal ============= */
+/* ============= Kardinalriktningar för vind ============= */
 
 const char* open_meteo_api_get_wind_direction(int degrees) {
     degrees = degrees % 360;
@@ -121,7 +121,7 @@ const char* open_meteo_api_get_wind_direction(int degrees) {
     }
 }
 
-/* ============= HTTP Client Integration ============= */
+/* ============= HTTP-klientintegration ============= */
 
 static void http_fetch_async_callback(const char* event, const char* response,
                                       void* context) {
@@ -135,7 +135,7 @@ static void http_fetch_async_callback(const char* event, const char* response,
     int          status = -1;
 
     if (strcmp(event, "RESPONSE") == 0) {
-        /* Parse weather data from response */
+        /* Parsa väderdata från svar */
         data = (WeatherData*)calloc(1, sizeof(WeatherData));
         if (data) {
             int parse_result =
@@ -144,7 +144,7 @@ static void http_fetch_async_callback(const char* event, const char* response,
             if (parse_result == 0) {
                 status = 0;
 
-                /* Save to cache if enabled */
+                /* Spara till cache om aktiverad */
                 if (g_config.use_cache && ctx->cache_key) {
                     json_error_t error;
                     json_t*      json =
@@ -176,12 +176,12 @@ static void http_fetch_async_callback(const char* event, const char* response,
         status = -2;
     }
 
-    /* Invoke user callback */
+    /* Anropa användarens callback */
     if (ctx->callback) {
         ctx->callback(status, data, ctx->user_context);
     }
 
-    /* Cleanup context */
+    /* Rensa kontexten */
     if (ctx->location) {
         if (ctx->location->name) {
             free((void*)ctx->location->name);
@@ -197,7 +197,7 @@ static void http_fetch_async_callback(const char* event, const char* response,
     free(ctx);
 }
 
-/* ============= Public API Implementation ============= */
+/* ============= Implementering av publikt API ============= */
 
 int open_meteo_api_init(WeatherConfig* config) {
     if (!config) {
@@ -206,7 +206,7 @@ int open_meteo_api_init(WeatherConfig* config) {
 
     g_config = *config;
 
-    /* Initialize cache */
+    /* Initiera cache */
     FileCacheConfig cache_cfg = {.cache_dir   = g_config.cache_dir,
                                  .ttl_seconds = g_config.cache_ttl,
                                  .enabled     = g_config.use_cache};
@@ -232,7 +232,7 @@ int open_meteo_api_get_current_async(Location*          location,
         return -1;
     }
 
-    /* Generate cache key from coordinates */
+    /* Generera cache-nyckel från koordinater */
     char key_input[256];
     snprintf(key_input, sizeof(key_input), "weather_%.6f_%.6f",
              location->latitude, location->longitude);
@@ -244,7 +244,7 @@ int open_meteo_api_get_current_async(Location*          location,
         return -2;
     }
 
-    /* Check cache */
+    /* Kontrollera cache */
     if (g_config.use_cache && file_cache_is_valid(g_weather_cache, cache_key)) {
         printf("[METEO] Cache HIT\n");
 
@@ -256,7 +256,7 @@ int open_meteo_api_get_current_async(Location*          location,
             json_decref(cached_json);
 
             if (result == 0) {
-                /* Invoke callback immediately with cached data */
+                /* Anropa callback omedelbart med cachad data */
                 callback(0, data, user_context);
                 return 0;
             }
@@ -267,7 +267,7 @@ int open_meteo_api_get_current_async(Location*          location,
         printf("[METEO] Cache MISS\n");
     }
 
-    /* Fetch from API asynchronously */
+    /* Hämta från API asynkront */
     return fetch_weather_from_api_async(location, callback, user_context,
                                         cache_key);
 }
@@ -282,10 +282,10 @@ int open_meteo_api_get_current(Location* location, WeatherData** data) {
             "[METEO] Warning: open_meteo_api_get_current() is deprecated. "
             "Use open_meteo_api_get_current_async() instead.\n");
 
-    /* This synchronous version is kept for backward compatibility
-     * but should be migrated to the async version */
+    /* Denna synkrona version behålls för bakåtkompatibilitet
+     * men bör migreras till den asynkrona versionen */
 
-    /* Generate cache key from coordinates */
+    /* Generera cache-nyckel från koordinater */
     char key_input[256];
     snprintf(key_input, sizeof(key_input), "weather_%.6f_%.6f",
              location->latitude, location->longitude);
@@ -297,7 +297,7 @@ int open_meteo_api_get_current(Location* location, WeatherData** data) {
         return -2;
     }
 
-    /* Check cache */
+    /* Kontrollera cache */
     if (g_config.use_cache && file_cache_is_valid(g_weather_cache, cache_key)) {
         printf("[METEO] Cache HIT\n");
 
@@ -386,10 +386,10 @@ int open_meteo_api_parse_query(const char* query, float* lat, float* lon) {
     return (found_lat && found_lon) ? 0 : -1;
 }
 
-/* ============= Internal Functions ============= */
+/* ============= Interna funktioner ============= */
 
 /**
- * Load weather data from parsed JSON object
+ * Ladda väderdata från parsad JSON-objekt
  */
 static int load_weather_from_json(json_t* root, WeatherData** data) {
     if (!root) {
@@ -409,7 +409,7 @@ static int load_weather_from_json(json_t* root, WeatherData** data) {
         return -3;
     }
 
-    /* Parse all weather data fields */
+    /* Parsa alla väderdatafält */
     json_t* temp = json_object_get(current, "temperature_2m");
     if (temp) {
         (*data)->temperature = json_real_value(temp);
@@ -450,7 +450,7 @@ static int load_weather_from_json(json_t* root, WeatherData** data) {
         (*data)->is_day = json_integer_value(is_day);
     }
 
-    /* Parse units */
+    /* Parsa enheter */
     json_t* temp_unit = json_object_get(current_units, "temperature_2m");
     if (temp_unit && json_is_string(temp_unit)) {
         strncpy((*data)->temperature_unit, json_string_value(temp_unit),
@@ -514,7 +514,7 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
         return -2;
     }
 
-    // Parse all fields
+    // Parsa alla fält
     json_t* temp = json_object_get(current, "temperature_2m");
     if (temp) {
         data->temperature = json_real_value(temp);
@@ -555,7 +555,7 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
         data->is_day = json_integer_value(is_day);
     }
 
-    /* Parse units */
+    /* Parsa enheter */
     if (current_units) {
         json_t* temp_unit = json_object_get(current_units, "temperature_2m");
         if (temp_unit && json_is_string(temp_unit)) {
@@ -595,7 +595,7 @@ static int fetch_weather_from_api_async(Location*          location,
 
     printf("[METEO] Fetching: %s\n", url);
 
-    /* Allocate async context */
+    /* Allokera asynkront kontext */
     AsyncWeatherContext* ctx =
         (AsyncWeatherContext*)calloc(1, sizeof(AsyncWeatherContext));
     if (!ctx) {
@@ -603,7 +603,7 @@ static int fetch_weather_from_api_async(Location*          location,
         return -2;
     }
 
-    /* Store location data (we need to copy it) */
+    /* Lagra platsdata (vi behöver kopiera den) */
     ctx->location = (Location*)malloc(sizeof(Location));
     if (!ctx->location) {
         free(ctx);
@@ -620,7 +620,7 @@ static int fetch_weather_from_api_async(Location*          location,
     ctx->cache_key    = cache_key ? strdup(cache_key) : NULL;
     ctx->url          = url;
 
-    /* Start async HTTP request (30 second timeout) */
+    /* Starta asynkron HTTP-förfrågan (30 sekunders timeout) */
     int result =
         http_client_get(url, NULL, 30000, http_fetch_async_callback, ctx);
 

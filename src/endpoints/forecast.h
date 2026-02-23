@@ -1,6 +1,6 @@
 /**
  * @file forecast.h
- * @brief Weather forecast endpoint handler
+ * @brief Endpoint-hanterare för väderprognos
  */
 
 #ifndef FORECAST_H
@@ -13,15 +13,15 @@
 #include <string.h>
 
 /**
- * @brief Handle forecast weather endpoint
- * @param conn HTTP connection
- * @param query Query string with city, country, and days parameters
- * @return 0 on success, -1 on error
+ * @brief Hantera endpoint för väderprognos
+ * @param conn HTTP-anslutning
+ * @param query Frågesträng med stad-, land- och dagarparametrar
+ * @return 0 vid framgång, -1 vid fel
  */
 static inline int handle_forecast_weather(HTTPServerConnection* conn,
                                           const char*           query) {
-    // TODO: Implement actual forecast handler
-    // For now, delegate to Open-Meteo current weather handler as a placeholder
+    // TODO: Implementera riktig prognoshanterare
+    // For nu, delegera till Open-Meteo aktuellt vaderhanterare som platshallare
     return open_meteo_handler_current_async(conn, query);
 }
 

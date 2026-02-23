@@ -1,5 +1,5 @@
 /**
- * file_cache.c - Unified file-based caching module implementation
+ * file_cache.c - Implementering av enhetlig filbaserad cache-modul
  */
 
 #include "file_cache.h"
@@ -15,7 +15,7 @@
 #include <time.h>
 #include <unistd.h>
 
-/* ============= Internal Structure ============= */
+/* ============= Intern struktur ============= */
 
 struct FileCacheInstance {
     char cache_dir[FILE_CACHE_MAX_PATH_LENGTH];
@@ -23,10 +23,10 @@ struct FileCacheInstance {
     bool enabled;
 };
 
-/* ============= Internal Helpers ============= */
+/* ============= Interna hjälpfunktioner ============= */
 
 /**
- * Create directory and all parent directories (like mkdir -p)
+ * Skapa katalog och alla föräldrakataloger (som mkdir -p)
  */
 static int mkdir_recursive(const char* path, mode_t mode) {
     char   tmp[FILE_CACHE_MAX_PATH_LENGTH];
@@ -68,7 +68,7 @@ static int mkdir_recursive(const char* path, mode_t mode) {
 }
 
 /**
- * Build full filepath for cache entry
+ * Bygg fullständig filsökväg för cache-post
  */
 static void build_filepath(const FileCacheInstance* cache,
                            const char* cache_key, char* out_path,
@@ -77,13 +77,13 @@ static void build_filepath(const FileCacheInstance* cache,
 }
 
 /**
- * Check if file exists and is within TTL
+ * Kontrollera om fil finns och är inom TTL
  */
 static bool is_file_valid(const char* filepath, int ttl_seconds) {
     struct stat file_stat;
 
     if (stat(filepath, &file_stat) != 0) {
-        return false; /* File does not exist */
+        return false; /* Filen finns inte */
     }
 
     time_t now = time(NULL);
@@ -92,7 +92,7 @@ static bool is_file_valid(const char* filepath, int ttl_seconds) {
     return (age <= ttl_seconds);
 }
 
-/* ============= Lifecycle Implementation ============= */
+/* ============= Livscykelimplementering ============= */
 
 FileCacheInstance* file_cache_create(const FileCacheConfig* config) {
     if (!config || !config->cache_dir) {
@@ -108,7 +108,7 @@ FileCacheInstance* file_cache_create(const FileCacheConfig* config) {
     cache->ttl_seconds = config->ttl_seconds;
     cache->enabled     = config->enabled;
 
-    /* Create cache directory if it doesn't exist */
+    /* Skapa cache-katalogen om den inte finns */
     if (mkdir_recursive(cache->cache_dir, 0755) != 0) {
         fprintf(stderr,
                 "[FILE_CACHE] Warning: Failed to create cache directory: %s\n",
@@ -124,12 +124,12 @@ void file_cache_destroy(FileCacheInstance* cache) {
     }
 }
 
-/* ============= Core Operations Implementation ============= */
+/* ============= Implementering av kärnoperationer ============= */
 
 FileCacheResult file_cache_generate_key(FileCacheInstance* cache,
                                         const char* input, char* out_key,
                                         size_t key_size) {
-    (void)cache; /* Cache instance not needed for key generation */
+    (void)cache; /* Cache-instansen behövs inte för nyckelgenerering */
 
     if (!input || !out_key || key_size < FILE_CACHE_KEY_LENGTH) {
         return FILE_CACHE_ERROR_PARAM;
@@ -166,18 +166,18 @@ FileCacheResult file_cache_load(FileCacheInstance* cache, const char* cache_key,
     char filepath[FILE_CACHE_MAX_PATH_LENGTH];
     build_filepath(cache, cache_key, filepath, sizeof(filepath));
 
-    /* Check TTL */
+    /* Kontrollera TTL */
     if (!is_file_valid(filepath, cache->ttl_seconds)) {
         return FILE_CACHE_ERROR_EXPIRED;
     }
 
-    /* Open and read file */
+    /* Öppna och läs fil */
     FILE* fp = fopen(filepath, "r");
     if (!fp) {
         return FILE_CACHE_ERROR_NOT_FOUND;
     }
 
-    /* Get file size */
+    /* Hämta filstorlek */
     fseek(fp, 0, SEEK_END);
     long file_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
@@ -187,14 +187,14 @@ FileCacheResult file_cache_load(FileCacheInstance* cache, const char* cache_key,
         return FILE_CACHE_ERROR_IO;
     }
 
-    /* Allocate buffer */
+    /* Allokera buffert */
     char* buffer = malloc((size_t)file_size + 1);
     if (!buffer) {
         fclose(fp);
         return FILE_CACHE_ERROR_MEMORY;
     }
 
-    /* Read content */
+    /* Läs innehåll */
     size_t bytes_read = fread(buffer, 1, (size_t)file_size, fp);
     fclose(fp);
 
@@ -220,7 +220,7 @@ FileCacheResult file_cache_save(FileCacheInstance* cache, const char* cache_key,
     }
 
     if (!cache->enabled) {
-        return FILE_CACHE_OK; /* Silently succeed when disabled */
+        return FILE_CACHE_OK; /* Lyckas tyst när inaktiverad */
     }
 
     char filepath[FILE_CACHE_MAX_PATH_LENGTH];
@@ -245,7 +245,7 @@ FileCacheResult file_cache_save(FileCacheInstance* cache, const char* cache_key,
     return FILE_CACHE_OK;
 }
 
-/* ============= JSON Helpers Implementation ============= */
+/* ============= Implementering av JSON-hjälpfunktioner ============= */
 
 FileCacheResult file_cache_load_json(FileCacheInstance* cache,
                                      const char* cache_key, void** out_json) {
@@ -291,7 +291,7 @@ FileCacheResult file_cache_save_json(FileCacheInstance* cache,
     return result;
 }
 
-/* ============= Cache Management Implementation ============= */
+/* ============= Implementering av cache-hantering ============= */
 
 FileCacheResult file_cache_invalidate(FileCacheInstance* cache,
                                       const char*        cache_key) {
@@ -317,8 +317,7 @@ FileCacheResult file_cache_clear(FileCacheInstance* cache) {
     DIR* dir = opendir(cache->cache_dir);
     if (!dir) {
         if (errno == ENOENT) {
-            return FILE_CACHE_OK; /* Directory doesn't exist, nothing to clear
-                                   */
+            return FILE_CACHE_OK; /* Katalogen finns inte, inget att rensa */
         }
         return FILE_CACHE_ERROR_IO;
     }
@@ -328,13 +327,13 @@ FileCacheResult file_cache_clear(FileCacheInstance* cache) {
     int            errors = 0;
 
     while ((entry = readdir(dir)) != NULL) {
-        /* Skip . and .. */
+        /* Hoppa över . och .. */
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0) {
             continue;
         }
 
-        /* Only delete .json files */
+        /* Ta bara bort .json-filer */
         size_t name_len = strlen(entry->d_name);
         if (name_len > 5 &&
             strcmp(entry->d_name + name_len - 5, ".json") == 0) {
@@ -343,7 +342,7 @@ FileCacheResult file_cache_clear(FileCacheInstance* cache) {
 
             if (written < 0 || (size_t)written >= sizeof(filepath)) {
                 errors++;
-                continue; /* Path too long, skip */
+                continue; /* Sökvägen är för lång, hoppa över */
             }
 
             if (unlink(filepath) != 0) {
@@ -357,7 +356,7 @@ FileCacheResult file_cache_clear(FileCacheInstance* cache) {
     return (errors == 0) ? FILE_CACHE_OK : FILE_CACHE_ERROR_IO;
 }
 
-/* ============= Utilities Implementation ============= */
+/* ============= Implementering av hjälpfunktioner ============= */
 
 FileCacheResult file_cache_normalize_string(const char* input, char* output,
                                             size_t output_size) {
@@ -373,12 +372,12 @@ FileCacheResult file_cache_normalize_string(const char* input, char* output,
 
         if (c == ' ' || c == '\t' || c == '+' || c == '_') {
             if (j == 0 || prev_was_sep) {
-                continue; /* Skip leading or consecutive separators */
+                continue; /* Hoppa över ledande eller konsekutiva separatorer */
             }
             output[j++]  = '_';
             prev_was_sep = 1;
         } else {
-            /* ASCII-only lowercase conversion */
+            /* Konvertering till gemener (endast ASCII) */
             if (c >= 'A' && c <= 'Z') {
                 output[j++] = (char)(c - 'A' + 'a');
             } else {
@@ -388,7 +387,7 @@ FileCacheResult file_cache_normalize_string(const char* input, char* output,
         }
     }
 
-    /* Trim trailing underscore */
+    /* Ta bort avslutande understreck */
     if (j > 0 && output[j - 1] == '_') {
         j--;
     }

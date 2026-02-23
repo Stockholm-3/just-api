@@ -1,11 +1,11 @@
-/* open_meteo_api.h - Open meteo API integration for just-weather server */
+/* open_meteo_api.h - Open-Meteo API-integration för just-weather-servern */
 
 #ifndef OPEN_METEO_API_H
 #define OPEN_METEO_API_H
 
 #include <stdbool.h>
 
-/* Weather data structure */
+/* Datastruktur för väderdata */
 typedef struct {
     int weather_code;
 
@@ -26,52 +26,52 @@ typedef struct {
     float latitude;
     float longitude;
 
-    /* Internal: raw JSON from API (for caching) - DO NOT USE DIRECTLY */
+    /* Internt: rå JSON från API (för cachelagring) - ANVÄND INTE DIREKT */
     char* _raw_json_cache;
 } WeatherData;
 
-/* Location structure */
+/* Platsstruktur */
 typedef struct {
     float       latitude;
     float       longitude;
     const char* name;
 } Location;
 
-/* Configuration */
+/* Konfiguration */
 typedef struct {
     const char* cache_dir;
     int         cache_ttl;
     bool        use_cache;
 } WeatherConfig;
 
-/* Callback type for async weather data retrieval */
+/* Callback-typ för asynkron hämtning av väderdata */
 typedef void (*WeatherApiCallback)(int status, WeatherData* data,
                                    void* context);
 
-/* Initialize weather API */
+/* Initiera väder-API */
 int open_meteo_api_init(WeatherConfig* config);
 
-/* Get current weather for location (async with callback) */
+/* Hämta aktuellt väder för plats (asynkront med callback) */
 int open_meteo_api_get_current_async(Location*          location,
                                      WeatherApiCallback callback,
                                      void*              context);
 
-/* Get current weather for location (legacy synchronous - deprecated) */
+/* Hämta aktuellt väder för plats (äldre synkron version - föråldrad) */
 int open_meteo_api_get_current(Location* location, WeatherData** data);
 
-/* Free weather data */
+/* Frigör väderdata */
 void open_meteo_api_free_current(WeatherData* data);
 
-/* Cleanup */
+/* Rensning */
 void open_meteo_api_cleanup(void);
 
-/* Get weather description from code */
+/* Hämta väderbeskrivning från kod */
 const char* open_meteo_api_get_description(int weather_code);
 
-/* Get wind direction name from degrees (North, South-Southeast, etc.) */
+/* Hämta vindriktninsnamn från grader (Norr, Syd-Sydost, osv.) */
 const char* open_meteo_api_get_wind_direction(int degrees);
 
-/* Parse query parameters: lat=X&long=Y or lat=X&lon=Y */
+/* Parsa frågeparametrar: lat=X&long=Y eller lat=X&lon=Y */
 int open_meteo_api_parse_query(const char* query, float* lat, float* lon);
 
 #endif /* OPEN_METEO_API_H */

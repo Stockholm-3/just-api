@@ -1,8 +1,8 @@
 /**
- * file_cache.h - Unified file-based caching module
+ * file_cache.h - Enhetlig filbaserad cache-modul
  *
- * Provides a generic caching API with TTL-based expiration,
- * MD5 key generation, and JSON support via jansson.
+ * Tillhandahåller ett generiskt cache-API med TTL-baserad utgång,
+ * MD5-nyckelgenerering och JSON-stöd via jansson.
  */
 
 #ifndef FILE_CACHE_H
@@ -12,165 +12,165 @@
 #include <stddef.h>
 
 #define FILE_CACHE_MAX_PATH_LENGTH 512
-#define FILE_CACHE_KEY_LENGTH 33 /* MD5 hex string + null terminator */
+#define FILE_CACHE_KEY_LENGTH 33 /* MD5 hex-sträng + null-terminator */
 
-/* Cache operation result codes */
+/* Resultatkoder för cache-operationer */
 typedef enum {
     FILE_CACHE_OK              = 0,
-    FILE_CACHE_ERROR_PARAM     = -1, /* Invalid parameter */
-    FILE_CACHE_ERROR_NOT_FOUND = -2, /* Cache entry not found */
-    FILE_CACHE_ERROR_EXPIRED   = -3, /* Cache entry expired */
-    FILE_CACHE_ERROR_IO        = -4, /* File I/O error */
-    FILE_CACHE_ERROR_MEMORY    = -5, /* Memory allocation failed */
-    FILE_CACHE_ERROR_HASH      = -6, /* Hash computation failed */
-    FILE_CACHE_ERROR_PARSE     = -7  /* JSON parse error */
+    FILE_CACHE_ERROR_PARAM     = -1, /* Ogiltigt parameter */
+    FILE_CACHE_ERROR_NOT_FOUND = -2, /* Cache-post hittades inte */
+    FILE_CACHE_ERROR_EXPIRED   = -3, /* Cache-post har gått ut */
+    FILE_CACHE_ERROR_IO        = -4, /* Fil-I/O-fel */
+    FILE_CACHE_ERROR_MEMORY    = -5, /* Minnesallokering misslyckades */
+    FILE_CACHE_ERROR_HASH      = -6, /* Hash-beräkning misslyckades */
+    FILE_CACHE_ERROR_PARSE     = -7  /* JSON-parsningsfel */
 } FileCacheResult;
 
-/* Configuration for a cache instance */
+/* Konfiguration för en cache-instans */
 typedef struct {
-    const char* cache_dir;   /* Directory for cache files */
-    int         ttl_seconds; /* Time-to-live in seconds */
-    bool        enabled;     /* Whether caching is enabled */
+    const char* cache_dir;   /* Katalog för cache-filer */
+    int         ttl_seconds; /* Livstid i sekunder */
+    bool        enabled;     /* Huruvida cachen är aktiverad */
 } FileCacheConfig;
 
-/* Opaque cache instance handle */
+/* Ogenomskinligt handtag för cache-instans */
 typedef struct FileCacheInstance FileCacheInstance;
 
-/* ============= Lifecycle ============= */
+/* ============= Livscykel ============= */
 
 /**
- * Create and initialize a new cache instance.
- * Creates the cache directory if it doesn't exist.
+ * Skapa och initiera en ny cache-instans.
+ * Skapar cache-katalogen om den inte finns.
  *
- * @param config  Configuration for this cache instance
- * @return        Pointer to cache instance, or NULL on error
+ * @param config  Konfiguration för denna cache-instans
+ * @return        Pekare till cache-instans, eller NULL vid fel
  */
 FileCacheInstance* file_cache_create(const FileCacheConfig* config);
 
 /**
- * Destroy a cache instance and free resources.
+ * Förstör en cache-instans och frigör resurser.
  *
- * @param cache  Cache instance to destroy
+ * @param cache  Cache-instans som ska förstöras
  */
 void file_cache_destroy(FileCacheInstance* cache);
 
-/* ============= Core Operations ============= */
+/* ============= Kärnoperationer ============= */
 
 /**
- * Generate a cache key (MD5 hash) from input string.
+ * Generera en cache-nyckel (MD5-hash) från indatasträng.
  *
- * @param cache     Cache instance
- * @param input     Input string to hash
- * @param out_key   Output buffer for hex hash (>= FILE_CACHE_KEY_LENGTH)
- * @param key_size  Size of out_key buffer
- * @return          FILE_CACHE_OK on success, error code otherwise
+ * @param cache     Cache-instans
+ * @param input     Indatasträng att hasha
+ * @param out_key   Utdatabuffert för hex-hash (>= FILE_CACHE_KEY_LENGTH)
+ * @param key_size  Storlek på out_key-buffert
+ * @return          FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_generate_key(FileCacheInstance* cache,
                                         const char* input, char* out_key,
                                         size_t key_size);
 
 /**
- * Check if a cache entry exists and is not expired.
+ * Kontrollera om en cache-post finns och inte har gått ut.
  *
- * @param cache      Cache instance
- * @param cache_key  The cache key (MD5 hash from file_cache_generate_key)
- * @return           true if valid cache entry exists, false otherwise
+ * @param cache      Cache-instans
+ * @param cache_key  Cache-nyckeln (MD5-hash från file_cache_generate_key)
+ * @return           true om giltig cache-post finns, false annars
  */
 bool file_cache_is_valid(FileCacheInstance* cache, const char* cache_key);
 
 /**
- * Load raw data from cache file.
- * Checks TTL before loading. Returns FILE_CACHE_ERROR_EXPIRED if entry stale.
+ * Ladda rådata från cache-fil.
+ * Kontrollerar TTL innan laddning. Returnerar FILE_CACHE_ERROR_EXPIRED om posten är inaktuell.
  *
- * @param cache      Cache instance
- * @param cache_key  The cache key
- * @param out_data   Output pointer for loaded data (caller must free)
- * @param out_size   Output size of loaded data (optional, can be NULL)
- * @return           FILE_CACHE_OK on success, error code otherwise
+ * @param cache      Cache-instans
+ * @param cache_key  Cache-nyckeln
+ * @param out_data   Utdatapekare för laddad data (anroparen måste frigöra)
+ * @param out_size   Utdatastorlek för laddad data (valfri, kan vara NULL)
+ * @return           FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_load(FileCacheInstance* cache, const char* cache_key,
                                 char** out_data, size_t* out_size);
 
 /**
- * Save raw data to cache file.
+ * Spara rådata till cache-fil.
  *
- * @param cache      Cache instance
- * @param cache_key  The cache key
- * @param data       Data to save
- * @param data_size  Size of data in bytes (0 = use strlen)
- * @return           FILE_CACHE_OK on success, error code otherwise
+ * @param cache      Cache-instans
+ * @param cache_key  Cache-nyckeln
+ * @param data       Data att spara
+ * @param data_size  Datastorlek i byte (0 = använd strlen)
+ * @return           FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_save(FileCacheInstance* cache, const char* cache_key,
                                 const char* data, size_t data_size);
 
-/* ============= JSON Helpers ============= */
+/* ============= JSON-hjälpfunktioner ============= */
 
 /**
- * Load and parse JSON from cache (convenience wrapper).
+ * Ladda och parsa JSON från cache (bekvämlighetsomslagarfunktion).
  *
- * @param cache      Cache instance
- * @param cache_key  The cache key
- * @param out_json   Output pointer for parsed JSON (jansson json_t*)
- *                   Caller must call json_decref() when done.
- * @return           FILE_CACHE_OK on success, error code otherwise
+ * @param cache      Cache-instans
+ * @param cache_key  Cache-nyckeln
+ * @param out_json   Utdatapekare för parsad JSON (jansson json_t*)
+ *                   Anroparen måste anropa json_decref() när klar.
+ * @return           FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_load_json(FileCacheInstance* cache,
                                      const char* cache_key, void** out_json);
 
 /**
- * Serialize and save JSON to cache (convenience wrapper).
+ * Serialisera och spara JSON till cache (bekvämlighetsomslagarfunktion).
  *
- * @param cache      Cache instance
- * @param cache_key  The cache key
- * @param json       JSON object to save (jansson json_t*)
- * @return           FILE_CACHE_OK on success, error code otherwise
+ * @param cache      Cache-instans
+ * @param cache_key  Cache-nyckeln
+ * @param json       JSON-objekt att spara (jansson json_t*)
+ * @return           FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_save_json(FileCacheInstance* cache,
                                      const char* cache_key, void* json);
 
-/* ============= Cache Management ============= */
+/* ============= Cache-hantering ============= */
 
 /**
- * Invalidate (delete) a specific cache entry.
+ * Ogiltigförklara (ta bort) en specifik cache-post.
  *
- * @param cache      Cache instance
- * @param cache_key  The cache key
- * @return           FILE_CACHE_OK on success, error code otherwise
+ * @param cache      Cache-instans
+ * @param cache_key  Cache-nyckeln
+ * @return           FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_invalidate(FileCacheInstance* cache,
                                       const char*        cache_key);
 
 /**
- * Clear all cache entries for this cache instance.
+ * Rensa alla cache-poster för denna cache-instans.
  *
- * @param cache  Cache instance
- * @return       FILE_CACHE_OK on success, error code otherwise
+ * @param cache  Cache-instans
+ * @return       FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_clear(FileCacheInstance* cache);
 
-/* ============= Utilities ============= */
+/* ============= Hjälpfunktioner ============= */
 
 /**
- * Normalize a string for use as cache key input.
- * Converts to lowercase, collapses whitespace to underscores,
- * and trims leading/trailing underscores.
+ * Normalisera en sträng för användning som cache-nyckelindata.
+ * Konverterar till gemener, komprimerar blanksteg till understreck,
+ * och trimmar ledande/avslutande understreck.
  *
- * @param input        Input string
- * @param output       Output buffer
- * @param output_size  Size of output buffer
- * @return             FILE_CACHE_OK on success, error code otherwise
+ * @param input        Indatasträng
+ * @param output       Utdatabuffert
+ * @param output_size  Storlek på utdatabuffert
+ * @return             FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_normalize_string(const char* input, char* output,
                                             size_t output_size);
 
 /**
- * Get the full filepath for a cache entry.
+ * Hämta den fullständiga filsökvägen för en cache-post.
  *
- * @param cache      Cache instance
- * @param cache_key  The cache key
- * @param out_path   Output buffer for filepath
- * @param path_size  Size of out_path buffer
- * @return           FILE_CACHE_OK on success, error code otherwise
+ * @param cache      Cache-instans
+ * @param cache_key  Cache-nyckeln
+ * @param out_path   Utdatabuffert för filsökväg
+ * @param path_size  Storlek på out_path-buffert
+ * @return           FILE_CACHE_OK vid framgång, felkod annars
  */
 FileCacheResult file_cache_get_filepath(FileCacheInstance* cache,
                                         const char* cache_key, char* out_path,

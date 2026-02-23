@@ -10,7 +10,7 @@
 #include <stdio.h>
 
 // -------------------------
-// Routing table
+// Routingtabell
 // -------------------------
 
 typedef int (*RouteHandler)(HTTPServerConnection*, const char*);

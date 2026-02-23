@@ -1,11 +1,11 @@
 /**
  * @file weather_location_handler.c
- * @brief Implementation of the combined geocoding and weather handler.
+ * @brief Implementering av den kombinerade geokodnings- och väderhanteraren.
  *
- * This file implements the weather location handler which provides
- * city-based weather lookups and city search functionality.
+ * Denna fil implementerar väderplatshanteraren som tillhandahåller
+ * stadsbaserade vädersökningar och stadssökningsfunktionalitet.
  *
- * @see weather_location_handler.h for the public interface
+ * @see weather_location_handler.h för det publika gränssnittet
  */
 
 #include "weather_location_handler.h"
@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ============= Internal Structures ============= */
+/* ============= Interna strukturer ============= */
 
 typedef struct {
     HTTPServerConnection* conn;
@@ -31,61 +31,60 @@ typedef struct {
 } AsyncWeatherLocationContext;
 
 /**
- * @brief Global flag indicating whether the module has been initialized.
+ * @brief Global flagga som indikerar om modulen har initierats.
  * @internal
  */
 static bool g_initialized = false;
 
 /**
- * @brief Pointer to the popular cities database for fast lookups.
+ * @brief Pekare till populära städer-databasen för snabba sökningar.
  * @internal
  */
 static PopularCitiesDB* g_wlh_popular_cities_db = NULL;
 
 /**
- * @brief External reference to geocoding API's global popular cities DB
- * pointer.
+ * @brief Extern referens till geokodnings-API:ets globala pekare för populära städer-DB.
  * @internal
  *
- * This allows the geocoding module to use our loaded database.
+ * Detta gör att geokodningsmodulen kan använda vår laddade databas.
  */
 extern void* g_popular_cities_db;
 
-/* Forward declarations for internal functions */
+/* Framåtdeklarationer för interna funktioner */
 static void url_decode(const char* src, char* dst, size_t dst_size);
 static int  parse_city_query(const char* query, char* city, size_t city_size,
                              char* country, size_t country_size, char* region,
                              size_t region_size);
 static int  ensure_initialized(void);
 
-/* ============= Lazy Initialization ============= */
+/* ============= Lat initiering ============= */
 
 /**
- * @brief Ensure all dependent modules are initialized.
+ * @brief Säkerställ att alla beroende moduler är initierade.
  * @internal
  *
- * Performs lazy initialization of weather API, geocoding API,
- * and popular cities database. Safe to call multiple times.
+ * Utför lat initiering av väder-API, geokodnings-API,
+ * och populära städer-databas. Säkert att anropa flera gånger.
  *
- * @return 0 on success, -1 on failure.
+ * @return 0 vid framgång, -1 vid fel.
  */
 static int ensure_initialized(void) {
     if (g_initialized) {
-        return 0; /* Already initialized */
+        return 0; /* Redan initierad */
     }
 
     printf("[WEATHER_LOCATION] Initializing modules...\n");
 
-    /* FIX: Initialize Weather API FIRST */
-    /* This will create ./cache/ and set up caching */
+    /* FIX: Initiera väder-API:et FÖRST */
+    /* Detta skapar ./cache/ och konfigurerar cachelagring */
     if (open_meteo_handler_init() != 0) {
         fprintf(stderr, "[WEATHER_LOCATION] Failed to init weather API\n");
         return -1;
     }
 
-    /* Initialize geocoding API */
+    /* Initiera geokodnings-API */
     GeocodingConfig geo_config = {.cache_dir   = "./cache/geo_cache",
-                                  .cache_ttl   = 604800, /* 7 days */
+                                  .cache_ttl   = 604800, /* 7 dagar */
                                   .use_cache   = true,
                                   .max_results = 10,
                                   .language    = "eng"};
@@ -95,7 +94,7 @@ static int ensure_initialized(void) {
         return -1;
     }
 
-    /* Load popular cities database */
+    /* Ladda populära städer-databasen */
     int cities_result =
         popular_cities_load("./data/hot_cities.json", "./data/all_cities.json",
                             &g_wlh_popular_cities_db);
@@ -104,11 +103,11 @@ static int ensure_initialized(void) {
         fprintf(stderr,
                 "[WEATHER_LOCATION] Warning: Failed to load popular cities "
                 "database (fallback to API-only mode)\n");
-        /* Not a critical error - continue without local database */
+        /* Inte ett kritiskt fel - fortsätt utan lokal databas */
         g_popular_cities_db = NULL;
     } else {
         printf("[WEATHER_LOCATION] Loaded popular cities database\n");
-        /* Set the global pointer for geocoding_api to use */
+        /* Sätt den globala pekaren för geocoding_api att använda */
         g_popular_cities_db = g_wlh_popular_cities_db;
     }
 
@@ -117,26 +116,26 @@ static int ensure_initialized(void) {
     return 0;
 }
 
-/* ============= Public API ============= */
+/* ============= Publikt API ============= */
 
 /**
- * @brief Initialize the weather location handler explicitly.
+ * @brief Initiera väderplatshanteraren explicit.
  *
- * @return 0 on success, non-zero on failure.
+ * @return 0 vid framgång, icke-noll vid fel.
  */
 int weather_location_handler_init(void) {
-    /* Explicit initialization (optional) */
+    /* Explicit initiering (valfri) */
     return ensure_initialized();
 }
 
 /**
- * @brief Handle weather request by city name.
+ * @brief Hantera väderförfrågan via stadsnamn.
  *
- * @param[in]  query_string  URL query parameters.
- * @param[out] response_json Allocated JSON response (caller frees).
- * @param[out] status_code   HTTP status code.
+ * @param[in]  query_string  URL-frågeparametrar.
+ * @param[out] response_json Allokerat JSON-svar (anroparen frigör).
+ * @param[out] status_code   HTTP-statuskod.
  *
- * @return 0 on success, -1 on error.
+ * @return 0 vid framgång, -1 vid fel.
  */
 int weather_location_handler_by_city(const char* query_string,
                                      char** response_json, int* status_code) {
@@ -144,7 +143,7 @@ int weather_location_handler_by_city(const char* query_string,
         return -1;
     }
 
-    /* Automatic initialization on first call */
+    /* Automatisk initiering vid första anropet */
     if (ensure_initialized() != 0) {
         *response_json = response_builder_error(
             HTTP_INTERNAL_ERROR,
@@ -157,7 +156,7 @@ int weather_location_handler_by_city(const char* query_string,
     *response_json = NULL;
     *status_code   = HTTP_INTERNAL_ERROR;
 
-    /* Parse query parameters */
+    /* Parsa frågeparametrar */
     char city[128]  = {0};
     char country[8] = {0};
     char region[64] = {0};
@@ -183,7 +182,7 @@ int weather_location_handler_by_city(const char* query_string,
            region[0] ? ", " : "", region, country[0] ? " (" : "",
            country[0] ? country : "");
 
-    /* 1. Find city coordinates via geocoding */
+    /* 1. Hitta stadskoordinater via geokodning */
     GeocodingResponse* geo_response = NULL;
     int                result;
 
@@ -209,7 +208,7 @@ int weather_location_handler_by_city(const char* query_string,
         return -1;
     }
 
-    /* Take the best result */
+    /* Ta det bästa resultatet */
     GeocodingResult* best_location = geocoding_api_get_best_result(
         geo_response, country[0] ? country : NULL);
     if (!best_location) {
@@ -226,7 +225,7 @@ int weather_location_handler_by_city(const char* query_string,
            best_location->name, best_location->country, best_location->latitude,
            best_location->longitude);
 
-    /* 2. Fetch weather for the found coordinates */
+    /* 2. Hämta väder för de hittade koordinaterna */
     Location location = {.latitude  = best_location->latitude,
                          .longitude = best_location->longitude,
                          .name      = best_location->name};
@@ -244,10 +243,10 @@ int weather_location_handler_by_city(const char* query_string,
         return -1;
     }
 
-    /* 3. Build JSON response with city and weather information */
+    /* 3. Bygg JSON-svar med stads- och väderinformation */
     json_t* data = json_object();
 
-    /* Add location information */
+    /* Lagg till platsinformation */
     json_t* location_obj = json_object();
     json_object_set_new(location_obj, "name", json_string(best_location->name));
     json_object_set_new(location_obj, "country",
@@ -277,7 +276,7 @@ int weather_location_handler_by_city(const char* query_string,
 
     json_object_set_new(data, "location", location_obj);
 
-    /* Add weather data */
+    /* Lagg till vaderdata */
     json_t* weather_obj = json_object();
     json_object_set_new(weather_obj, "temperature",
                         json_real(weather_data->temperature));
@@ -308,11 +307,11 @@ int weather_location_handler_by_city(const char* query_string,
 
     json_object_set_new(data, "current_weather", weather_obj);
 
-    /* Cleanup weather data */
+    /* Rensa vaderdata */
     open_meteo_api_free_current(weather_data);
     geocoding_api_free_response(geo_response);
 
-    /* Build standardized response */
+    /* Bygg standardiserat svar */
     *response_json = response_builder_success(data);
 
     if (!*response_json) {
@@ -327,13 +326,13 @@ int weather_location_handler_by_city(const char* query_string,
 }
 
 /**
- * @brief Handle city search request for autocomplete.
+ * @brief Hantera stadssokningsforfragan for autocomplete.
  *
- * @param[in]  query_string  URL query parameters with search query.
- * @param[out] response_json Allocated JSON response (caller frees).
- * @param[out] status_code   HTTP status code.
+ * @param[in]  query_string  URL-frageparametrar med sokfraga.
+ * @param[out] response_json Allokerat JSON-svar (anroparen frigor).
+ * @param[out] status_code   HTTP-statuskod.
  *
- * @return 0 on success, -1 on error.
+ * @return 0 vid framgang, -1 vid fel.
  */
 int weather_location_handler_search_cities(const char* query_string,
                                            char**      response_json,
@@ -342,7 +341,7 @@ int weather_location_handler_search_cities(const char* query_string,
         return -1;
     }
 
-    /* Automatic initialization on first call */
+    /* Automatisk initiering vid första anropet */
     if (ensure_initialized() != 0) {
         *response_json = response_builder_error(
             HTTP_INTERNAL_ERROR,
@@ -355,7 +354,7 @@ int weather_location_handler_search_cities(const char* query_string,
     *response_json = NULL;
     *status_code   = HTTP_INTERNAL_ERROR;
 
-    /* Parse query parameter */
+    /* Parsa frageparameter */
     char query[256] = {0};
     if (sscanf(query_string, "query=%255[^&]", query) != 1 ||
         query[0] == '\0') {
@@ -366,11 +365,11 @@ int weather_location_handler_search_cities(const char* query_string,
         return -1;
     }
 
-    /* URL decode the query */
+    /* URL-avkoda fragan */
     char decoded_query[256] = {0};
     url_decode(query, decoded_query, sizeof(decoded_query));
 
-    /* Validate minimum query length (2 characters) */
+    /* Validera minsta fragelangd (2 tecken) */
     if (strlen(decoded_query) < 2) {
         *response_json = response_builder_error(
             HTTP_BAD_REQUEST, response_builder_get_error_type(HTTP_BAD_REQUEST),
@@ -379,10 +378,10 @@ int weather_location_handler_search_cities(const char* query_string,
         return -1;
     }
 
-    /* Search for cities using 3-tier strategy:
-     * 1. Popular Cities DB (in-memory, fastest)
-     * 2. File cache (fast)
-     * 3. Open-Meteo API (slow, uses quota)
+    /* Sok efter stader med 3-niva-strategi:
+     * 1. Populara stader-DB (i minnet, snabbast)
+     * 2. Filcache (snabb)
+     * 3. Open-Meteo API (langsammast, anvander kvot)
      */
     GeocodingResponse* response = NULL;
     int result = geocoding_api_search_smart(decoded_query, &response);
@@ -396,7 +395,7 @@ int weather_location_handler_search_cities(const char* query_string,
         return -1;
     }
 
-    /* Build JSON response */
+    /* Bygg JSON-svar */
     json_t* data = json_object();
     json_object_set_new(data, "query", json_string(decoded_query));
     json_object_set_new(data, "count", json_integer(response->count));
@@ -430,7 +429,7 @@ int weather_location_handler_search_cities(const char* query_string,
 
     geocoding_api_free_response(response);
 
-    /* Build standardized response */
+    /* Bygg standardiserat svar */
     *response_json = response_builder_success(data);
 
     if (!*response_json) {
@@ -444,7 +443,7 @@ int weather_location_handler_search_cities(const char* query_string,
 }
 
 /**
- * @brief Clean up the weather location handler and all dependencies.
+ * @brief Rensa vaderplatshanteraren och alla beroenden.
  */
 void weather_location_handler_cleanup(void) {
     if (!g_initialized) {
@@ -454,7 +453,7 @@ void weather_location_handler_cleanup(void) {
     geocoding_api_cleanup();
     open_meteo_handler_cleanup();
 
-    /* Cleanup popular cities database */
+    /* Rensa populara stader-databasen */
     if (g_wlh_popular_cities_db) {
         popular_cities_free(g_wlh_popular_cities_db);
         g_wlh_popular_cities_db = NULL;
@@ -465,18 +464,18 @@ void weather_location_handler_cleanup(void) {
     printf("[WEATHER_LOCATION] Handler cleaned up\n");
 }
 
-/* ============= Internal Functions ============= */
+/* ============= Interna funktioner ============= */
 
 /**
- * @brief Decode URL-encoded string.
+ * @brief Avkoda URL-kodad sträng.
  * @internal
  *
- * Converts %XX sequences to their character equivalents.
- * Also converts '+' and '_' to spaces for query parameter compatibility.
+ * Konverterar %XX-sekvenser till deras teckenekvivalenter.
+ * Konverterar aven '+' och '_' till mellanslag for frageparameterkompatibilitet.
  *
- * @param[in]  src      Source URL-encoded string.
- * @param[out] dst      Destination buffer for decoded string.
- * @param[in]  dst_size Size of destination buffer.
+ * @param[in]  src      Källa URL-kodad sträng.
+ * @param[out] dst      Destinationsbuffert for avkodad sträng.
+ * @param[in]  dst_size Storlek pa destinationsbuffert.
  */
 static void url_decode(const char* src, char* dst, size_t dst_size) {
     if (!src || !dst || dst_size == 0) {
@@ -486,7 +485,7 @@ static void url_decode(const char* src, char* dst, size_t dst_size) {
     size_t dst_pos = 0;
     for (size_t i = 0; src[i] && dst_pos + 1 < dst_size; i++) {
         if (src[i] == '%' && src[i + 1] && src[i + 2]) {
-            /* Parse hex value */
+            /* Parsa hex-varde */
             char hex[3] = {src[i + 1], src[i + 2], '\0'};
             int  value  = (int)strtol(hex, NULL, 16);
             if (value > 0 && value < 256) {
@@ -496,7 +495,7 @@ static void url_decode(const char* src, char* dst, size_t dst_size) {
                 dst[dst_pos++] = src[i];
             }
         } else if (src[i] == '+' || src[i] == '_') {
-            /* Both + and _ represent spaces in query parameters */
+            /* Bade + och _ representerar mellanslag i frageparametrar */
             dst[dst_pos++] = ' ';
         } else {
             dst[dst_pos++] = src[i];
@@ -506,21 +505,21 @@ static void url_decode(const char* src, char* dst, size_t dst_size) {
 }
 
 /**
- * @brief Parse city query parameters from URL query string.
+ * @brief Parsa stadsfraga parametrar fran URL-fragasträng.
  * @internal
  *
- * Extracts city, country, and region parameters from a query string.
- * Parameters are URL-decoded during extraction.
+ * Extraherar stad-, land- och regionparametrar fran en fragasträng.
+ * Parametrar URL-avkodas under extrahering.
  *
- * @param[in]  query        URL query string to parse.
- * @param[out] city         Buffer to receive city name.
- * @param[in]  city_size    Size of city buffer.
- * @param[out] country      Buffer to receive country code.
- * @param[in]  country_size Size of country buffer.
- * @param[out] region       Buffer to receive region name.
- * @param[in]  region_size  Size of region buffer.
+ * @param[in]  query        URL-fragasträng att parsa.
+ * @param[out] city         Buffert for stadsnamn.
+ * @param[in]  city_size    Storlek pa stadsbuffert.
+ * @param[out] country      Buffert for landskod.
+ * @param[in]  country_size Storlek pa landsbuffert.
+ * @param[out] region       Buffert for regionnamn.
+ * @param[in]  region_size  Storlek pa regionbuffert.
  *
- * @return 0 if city parameter was found, -1 otherwise.
+ * @return 0 om stadsparameter hittades, -1 annars.
  */
 static int parse_city_query(const char* query, char* city, size_t city_size,
                             char* country, size_t country_size, char* region,
@@ -529,25 +528,25 @@ static int parse_city_query(const char* query, char* city, size_t city_size,
         return -1;
     }
 
-    /* Copy query for safe parsing */
+    /* Kopiera fraga for säker parsning */
     char query_copy[1024];
     strncpy(query_copy, query, sizeof(query_copy) - 1);
     query_copy[sizeof(query_copy) - 1] = '\0';
 
-    /* Parse parameters: city=X&country=Y&region=Z */
+    /* Parsa parametrar: city=X&country=Y&region=Z */
     char* token      = strtok(query_copy, "&");
     int   found_city = 0;
 
     while (token != NULL) {
         if (strncmp(token, "city=", 5) == 0) {
-            /* Decode URL-encoded city name */
+            /* Avkoda URL-kodat stadsnamn */
             url_decode(token + 5, city, city_size);
             found_city = 1;
         } else if (strncmp(token, "country=", 8) == 0) {
-            /* Decode URL-encoded country code */
+            /* Avkoda URL-kodad landskod */
             url_decode(token + 8, country, country_size);
         } else if (strncmp(token, "region=", 7) == 0) {
-            /* Decode URL-encoded region */
+            /* Avkoda URL-kodad region */
             url_decode(token + 7, region, region_size);
         }
         token = strtok(NULL, "&");
@@ -555,7 +554,7 @@ static int parse_city_query(const char* query, char* city, size_t city_size,
 
     return found_city ? 0 : -1;
 }
-/* ============= Async Handler Implementation ============= */
+/* ============= Implementering av asynkron hanterare ============= */
 
 static void weather_by_city_callback(int status, WeatherData* data,
                                      void* context);

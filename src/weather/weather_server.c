@@ -1,11 +1,11 @@
 /**
  * @file weather_server.c
- * @brief Implementation of the weather HTTP server.
+ * @brief Implementering av väder-HTTP-servern.
  *
- * This file implements the WeatherServer lifecycle management and
- * internal callback functions for handling HTTP connections.
+ * Denna fil implementerar WeatherServer-livscykelhantering och
+ * interna callback-funktioner för hantering av HTTP-anslutningar.
  *
- * @see weather_server.h for the public interface
+ * @see weather_server.h för det publika gränssnittet
  */
 
 #include "weather_server.h"
@@ -15,43 +15,43 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* ============= Internal Function Declarations ============= */
+/* ============= Interna funktionsdeklarationer ============= */
 
 /**
- * @brief Scheduler task callback for periodic instance work.
+ * @brief Schemaläggningscallback för periodiskt instansarbete.
  * @internal
  *
- * Called periodically by the scheduler to perform maintenance
- * work on all active server instances.
+ * Anropas periodiskt av schemaläggaren för att utföra underhållsarbete
+ * på alla aktiva serverinstanser.
  *
- * @param[in] context  WeatherServer pointer cast to void*.
- * @param[in] mon_time Current scheduler time in ticks.
+ * @param[in] context  WeatherServer-pekare castad till void*.
+ * @param[in] mon_time Aktuell schemaläggartid i tick.
  */
 void weather_server_task_work(void* context, uint64_t mon_time);
 
 /**
- * @brief HTTP connection callback for new client connections.
+ * @brief HTTP-anslutningscallback för nya klientanslutningar.
  * @internal
  *
- * Called by the HTTP server when a new client connects.
- * Creates a new WeatherServerInstance to handle the connection.
+ * Anropas av HTTP-servern när en ny klient ansluter.
+ * Skapar en ny WeatherServerInstance för att hantera anslutningen.
  *
- * @param[in] context    WeatherServer pointer cast to void*.
- * @param[in] connection The new HTTP connection to handle.
+ * @param[in] context    WeatherServer-pekare castad till void*.
+ * @param[in] connection Den nya HTTP-anslutningen som ska hanteras.
  *
- * @return 0 on success, -1 on failure.
+ * @return 0 vid framgång, -1 vid fel.
  */
 int weather_server_on_http_connection(void*                 context,
                                       HTTPServerConnection* connection);
 
-/* ============= Public API Implementation ============= */
+/* ============= Implementation av publikt API ============= */
 
 /**
- * @brief Initialize a WeatherServer structure.
+ * @brief Initiera en WeatherServer-struktur.
  *
- * @param[in,out] server Server to initialize.
+ * @param[in,out] server Server som ska initieras.
  *
- * @return 0 on success.
+ * @return 0 vid framgång.
  */
 int weather_server_initiate(WeatherServer* server) {
     http_server_initiate(&server->httpServer,
@@ -65,11 +65,11 @@ int weather_server_initiate(WeatherServer* server) {
 }
 
 /**
- * @brief Allocate and initialize a WeatherServer dynamically.
+ * @brief Allokera och initiera en WeatherServer dynamiskt.
  *
- * @param[out] server_ptr Pointer to receive the allocated server.
+ * @param[out] server_ptr Pekare som tar emot den allokerade servern.
  *
- * @return 0 on success, -1 if server_ptr is NULL, -2 if allocation fails.
+ * @return 0 vid framgång, -1 om server_ptr är NULL, -2 om allokering misslyckas.
  */
 int weather_server_initiate_ptr(WeatherServer** server_ptr) {
     if (server_ptr == NULL) {
@@ -92,16 +92,16 @@ int weather_server_initiate_ptr(WeatherServer** server_ptr) {
     return 0;
 }
 
-/* ============= Internal Callback Implementations ============= */
+/* ============= Implementering av interna callbacks ============= */
 
 /**
- * @brief Handle new HTTP connection by creating a server instance.
+ * @brief Hantera ny HTTP-anslutning genom att skapa en serverinstans.
  * @internal
  *
- * @param[in] context    WeatherServer pointer.
- * @param[in] connection New HTTP connection.
+ * @param[in] context    WeatherServer-pekare.
+ * @param[in] connection Ny HTTP-anslutning.
  *
- * @return 0 on success, -1 on failure.
+ * @return 0 vid framgång, -1 vid fel.
  */
 int weather_server_on_http_connection(void*                 context,
                                       HTTPServerConnection* connection) {
@@ -120,13 +120,13 @@ int weather_server_on_http_connection(void*                 context,
 }
 
 /**
- * @brief Periodic work callback for all server instances.
+ * @brief Periodisk arbets-callback för alla serverinstanser.
  * @internal
  *
- * Iterates through all active instances and calls their work function.
+ * Itererar igenom alla aktiva instanser och anropar deras arbetsfunktion.
  *
- * @param[in] context  WeatherServer pointer.
- * @param[in] mon_time Current scheduler time.
+ * @param[in] context  WeatherServer-pekare.
+ * @param[in] mon_time Aktuell schemaläggartid.
  */
 void weather_server_task_work(void* context, uint64_t mon_time) {
     WeatherServer* server = (WeatherServer*)context;
@@ -137,15 +137,15 @@ void weather_server_task_work(void* context, uint64_t mon_time) {
     }
 }
 
-/* ============= Cleanup Functions ============= */
+/* ============= Rensningsfunktioner ============= */
 
 /**
- * @brief Dispose of a stack-allocated WeatherServer.
+ * @brief Avsluta en stackallokerad WeatherServer.
  *
- * @param[in] server Server to dispose.
+ * @param[in] server Server som ska avslutas.
  */
 void weather_server_dispose(WeatherServer* server) {
-    /* Cleanup all instances to prevent memory leak */
+    /* Rensa alla instanser för att förhindra minnesläcka */
     LinkedList_foreach(server->instances, node) {
         WeatherServerInstance* instance = (WeatherServerInstance*)node->item;
         weather_server_instance_dispose(instance);
@@ -157,9 +157,9 @@ void weather_server_dispose(WeatherServer* server) {
 }
 
 /**
- * @brief Dispose and free a dynamically allocated WeatherServer.
+ * @brief Avsluta och frigör en dynamiskt allokerad WeatherServer.
  *
- * @param[in,out] server_ptr Pointer to the server pointer (set to NULL).
+ * @param[in,out] server_ptr Pekare till serverpekaren (sätts till NULL).
  */
 void weather_server_dispose_ptr(WeatherServer** server_ptr) {
     if (server_ptr == NULL || *(server_ptr) == NULL) {
