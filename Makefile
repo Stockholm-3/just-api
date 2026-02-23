@@ -48,7 +48,7 @@ LIBS    := -lmbedtls -lmbedx509 -lmbedcrypto -pthread -lstdc++
 # ------------------------------------------------------------
 # Source and object files
 # ------------------------------------------------------------
-SRC_FILES     := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*')
+SRC_FILES     := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*' ! -path '*/algostuff*')
 LIB_FILES     := $(shell find -L $(LIB_DIR) -type f -name '*.c'   ! -path '*/weather/*')
 LIB_CPP_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.cpp' ! -path '*/weather/*')
 
@@ -60,7 +60,7 @@ OBJ         := $(OBJ_SRC) $(OBJ_LIB) $(OBJ_LIB_CPP)
 # ------------------------------------------------------------
 # Watchdog binary
 # ------------------------------------------------------------
-WATCHDOG_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c')
+WATCHDOG_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c' ! -path '*/algostuff*')
 WATCHDOG_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(WATCHDOG_SRC))
 WATCHDOG_BIN := $(BUILD_DIR)/jws-watchdog
 
