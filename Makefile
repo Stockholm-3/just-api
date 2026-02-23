@@ -48,7 +48,7 @@ LIBS    := -lmbedtls -lmbedx509 -lmbedcrypto -pthread -lstdc++
 # ------------------------------------------------------------
 # Source and object files
 # ------------------------------------------------------------
-SRC_FILES     := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*' ! -path '*/algostuff*')
+SRC_FILES     := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*' ! -path '*/algostuff*' ! -path '*/compute*')
 LIB_FILES     := $(shell find -L $(LIB_DIR) -type f -name '*.c'   ! -path '*/weather/*')
 LIB_CPP_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.cpp' ! -path '*/weather/*')
 
@@ -60,15 +60,22 @@ OBJ         := $(OBJ_SRC) $(OBJ_LIB) $(OBJ_LIB_CPP)
 # ------------------------------------------------------------
 # Watchdog binary
 # ------------------------------------------------------------
-WATCHDOG_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c' ! -path '*/algostuff*')
+WATCHDOG_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c' ! -path '*/algostuff*' ! -path '*/compute*')
 WATCHDOG_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(WATCHDOG_SRC))
 WATCHDOG_BIN := $(BUILD_DIR)/jws-watchdog
+
+# ------------------------------------------------------------
+# Compute binary
+# ------------------------------------------------------------
+COMPUTE_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c' ! -path '*/algostuff*' ! -path '*/watchdog*')
+COMPUTE_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(COMPUTE_SRC))
+COMPUTE_BIN := $(BUILD_DIR)/compute
 
 # ------------------------------------------------------------
 # Build rules
 # ------------------------------------------------------------
 .PHONY: all
-all: $(BIN) $(WATCHDOG_BIN)
+all: $(BIN) $(WATCHDOG_BIN) $(COMPUTE_BIN)
 	@echo "Build complete. [$(BUILD_TYPE)]"
 
 .PHONY: watchdog
@@ -79,6 +86,11 @@ watchdog: $(WATCHDOG_BIN)
 $(WATCHDOG_BIN): $(WATCHDOG_OBJ) $(OBJ_LIB) $(OBJ_LIB_CPP)
 	@mkdir -p $(dir $@)
 	@echo "Linking watchdog..."
+	@$(CC) $(LDFLAGS) $^ -o $@ $(LIBS)
+
+$(COMPUTE_BIN): $(COMPUTE_OBJ) $(OBJ_LIB) $(OBJ_LIB_CPP)
+	@mkdir -p $(dir $@)
+	@echo "Linking compute..."
 	@$(CC) $(LDFLAGS) $^ -o $@ $(LIBS)
 
 # Link server binary
@@ -249,7 +261,7 @@ daemon-start:
 		fi; \
 	fi
 	@echo "Starting watchdog daemon..."
-	@$(WATCHDOG_BIN) --server $(BIN)
+	@$(WATCHDOG_BIN) --server $(BIN) --compute $(COMPUTE_BIN)
 	@sleep 1
 	@if [ -f /tmp/watchdog.pid ]; then \
 		echo "Watchdog started (PID $$(cat /tmp/watchdog.pid))"; \

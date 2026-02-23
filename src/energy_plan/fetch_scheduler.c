@@ -28,8 +28,6 @@ static void fork_compute(const char* exe) {
         return;
     }
 
-    // Ignore SIGCHLD so the OS reaps the child automatically when it exits,
-    // avoiding zombies without the parent ever needing to call waitpid().
     signal(SIGCHLD, SIG_IGN);
 
     pid_t pid = fork();
@@ -39,14 +37,10 @@ static void fork_compute(const char* exe) {
     }
 
     if (pid == 0) {
-        // Child: replace image with the compute executable
         execl(exe, exe, (char*)NULL);
-        // Only reached if execl fails
         LOG_ERROR("FETCH_SCHEDULER", "execl() failed for: %s", exe);
         _exit(1);
     }
-
-    // Parent: returns immediately, child runs independently
 }
 
 typedef struct {

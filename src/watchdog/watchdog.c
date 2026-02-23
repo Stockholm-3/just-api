@@ -7,12 +7,12 @@
 
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE
-#    include "netinet/in.h"
-#    include "sys/socket.h"
 #endif
 
 #include "../logger/logger.h"
 #include "energy_plan/fetch_scheduler.h"
+#include "netinet/in.h"
+#include "sys/socket.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #define DEFAULT_SERVER_PATH "./just-server"
+#define DEFAULT_COMPUTE_PATH "./compute"
 #define DEFAULT_PID_FILE "/tmp/watchdog.pid"
 #define DEFAULT_LOG_DIR "./logs"
 
@@ -42,6 +43,7 @@
 
 typedef struct {
     const char* server_path;
+    const char* compute_path;
     const char* pid_file;
     const char* log_dir;
     int         foreground;
@@ -243,6 +245,7 @@ static void print_usage(const char* prog) {
 static void parse_args(int argc, char* argv[], WatchdogConfig* config) {
     static struct option long_options[] = {
         {"server", required_argument, 0, 's'},
+        {"compute", required_argument, 0, 'c'},
         {"pid", required_argument, 0, 'p'},
         {"log-dir", required_argument, 0, 'l'},
         {"foreground", no_argument, 0, 'f'},
@@ -250,11 +253,14 @@ static void parse_args(int argc, char* argv[], WatchdogConfig* config) {
         {0, 0, 0, 0}};
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "s:p:l:fh", long_options, NULL)) !=
+    while ((opt = getopt_long(argc, argv, "s:c:p:l:fh", long_options, NULL)) !=
            -1) {
         switch (opt) {
         case 's':
             config->server_path = optarg;
+            break;
+        case 'c':
+            config->compute_path = optarg;
             break;
         case 'p':
             config->pid_file = optarg;
@@ -303,10 +309,11 @@ static void wait_for_server(const char* host, int port, int max_wait_ms) {
 
 int main(int argc, char* argv[]) {
     WatchdogConfig config = {
-        .server_path = DEFAULT_SERVER_PATH,
-        .pid_file    = DEFAULT_PID_FILE,
-        .log_dir     = DEFAULT_LOG_DIR,
-        .foreground  = 0,
+        .server_path  = DEFAULT_SERVER_PATH,
+        .compute_path = DEFAULT_COMPUTE_PATH,
+        .pid_file     = DEFAULT_PID_FILE,
+        .log_dir      = DEFAULT_LOG_DIR,
+        .foreground   = 0,
     };
 
     parse_args(argc, argv, &config);
@@ -358,6 +365,28 @@ int main(int argc, char* argv[]) {
     config.server_path = abs_server_path;
     LOG_DEBUG("WATCHDOG", "Server path resolved: %s", config.server_path);
 
+    static char abs_compute_path[PATH_MAX];
+
+    if (config.compute_path) {
+        if (access(config.compute_path, X_OK) != 0) {
+            LOG_ERROR("WATCHDOG",
+                      "Compute binary not found or not executable: %s",
+                      config.compute_path);
+            logger_shutdown();
+            return 1;
+        }
+
+        if (realpath(config.compute_path, abs_compute_path) == NULL) {
+            LOG_ERROR("WATCHDOG", "Cannot resolve compute path: %s",
+                      config.compute_path);
+            logger_shutdown();
+            return 1;
+        }
+
+        config.compute_path = abs_compute_path;
+        LOG_DEBUG("WATCHDOG", "Compute path resolved: %s", config.compute_path);
+    }
+
     if (!config.foreground) {
         LOG_INFO("DAEMON", "Daemonizing...");
         if (daemonize() < 0) {
@@ -404,6 +433,7 @@ int main(int argc, char* argv[]) {
 
     SchedulerServiceConfig sched_cfg = {
         .shutdown_flag = &g_shutdown_requested,
+        .compute_exe   = config.compute_path,
     };
 
     if (fetch_scheduler_start(&scheduler_thread, &sched_cfg) != 0) {

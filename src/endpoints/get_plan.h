@@ -27,33 +27,54 @@ typedef struct {
     HTTPServerConnection* conn;
     char                  city[256];
     char                  price[16];
-    double                lat;
-    double                lon;
 } PlanRequestContext;
 
-static void on_registry_done(void* context, CityRegisterStatus status) {
+static void on_output_read(void* context, CityOutputStatus status, char* buf,
+                           size_t len) {
     PlanRequestContext* ctx = (PlanRequestContext*)context;
 
-    const char* status_msg = (status == CITY_ADDED) ? "City has been added"
-                             : (status == CITY_EXISTS)
-                                 ? "City already exists (timestamp updated)"
-                                 : "City not added; maximum limit reached";
+    switch (status) {
+    case CITY_OUTPUT_OK:
+        send_response(ctx->conn, 200, "application/json", buf, len);
+        free(buf);
+        break;
 
-    char response[1024];
-    int  written =
-        snprintf(response, sizeof(response),
-                 "{ \"city\": \"%s\", \"price\": \"%s\", \"lat\": "
-                 "%.6f, \"lon\": %.6f, \"status\": \"%s\" }",
-                 ctx->city, ctx->price, ctx->lat, ctx->lon, status_msg);
+    case CITY_OUTPUT_NOT_FOUND: {
+        char err[1024];
+        snprintf(err, sizeof(err),
+                 "Compute output not yet available for city '%s'"
+                 "City '%s' is now registered and the data will be availiable "
+                 "within 1 hour",
+                 ctx->city, ctx->city);
+        send_json_error(ctx->conn, 503, err);
+        break;
+    }
 
-    if (written < 0 || written >= (int)sizeof(response)) {
-        send_json_error(ctx->conn, 500, "Response too large");
-    } else {
-        send_response(ctx->conn, 200, "application/json", response,
-                      (size_t)written);
+    case CITY_OUTPUT_LOCK_ERROR:
+        send_json_error(ctx->conn, 503,
+                        "Energy output temporarily unavailable; "
+                        "could not acquire read lock. Please retry.");
+        break;
+
+    case CITY_OUTPUT_READ_ERROR:
+        send_json_error(ctx->conn, 500,
+                        "Internal error reading compute output.");
+        break;
     }
 
     free(ctx);
+}
+
+static void on_registry_done(void* context, CityRegisterStatus status) {
+    (void)status;
+
+    PlanRequestContext* ctx = (PlanRequestContext*)context;
+
+    if (city_output_read_initiate(ctx->city, ctx, on_output_read) != 0) {
+        send_json_error(ctx->conn, 500,
+                        "Internal error initiating output read.");
+        free(ctx);
+    }
 }
 
 int handle_get_plan(HTTPServerConnection* conn, const char* query) {
@@ -94,12 +115,10 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
     }
 
     ctx->conn = conn;
-    strncpy(ctx->city, city, sizeof(ctx->city));
+    strncpy(ctx->city, city, sizeof(ctx->city) - 1);
     ctx->city[sizeof(ctx->city) - 1] = '\0';
-    strncpy(ctx->price, price, sizeof(ctx->price));
+    strncpy(ctx->price, price, sizeof(ctx->price) - 1);
     ctx->price[sizeof(ctx->price) - 1] = '\0';
-    ctx->lat                           = coords.lat;
-    ctx->lon                           = coords.lon;
 
     if (city_registry_initiate(CITY_REGISTRY_FILE, city, price, coords.lat,
                                coords.lon, ctx, on_registry_done) != 0) {
