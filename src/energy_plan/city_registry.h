@@ -18,9 +18,6 @@
 #include <stdint.h>
 #include <time.h>
 
-/* ── Constants ──────────────────────────────────────────────────────────────
- */
-
 #define MAX_REGISTERED_CITIES 200
 #define CITY_REGISTRY_FILE "energy_plan/cities.csv"
 #define CITY_TTL_SECONDS (2ULL * 24 * 3600)
@@ -31,9 +28,6 @@
 /** Lock file shared between energy_parser and all readers. */
 #define COMPUTE_OUTPUT_LOCK "energy_plan/compute_output/.lock"
 
-/* ── Registry result type ───────────────────────────────────────────────────
- */
-
 typedef enum {
     CITY_ADDED,
     CITY_EXISTS,
@@ -41,9 +35,6 @@ typedef enum {
 } CityRegisterStatus;
 
 typedef void (*CityRegistryOnDone)(void* context, CityRegisterStatus status);
-
-/* ── Compute-output reader result ───────────────────────────────────────────
- */
 
 typedef enum {
     CITY_OUTPUT_OK,         /**< File read successfully; buf/len are valid. */
@@ -66,9 +57,6 @@ typedef enum {
 typedef void (*CityOutputOnDone)(void* context, CityOutputStatus status,
                                  char* buf, size_t len);
 
-/* ── Shared entry / load types ──────────────────────────────────────────────
- */
-
 typedef struct {
     char   city[256];
     char   price[16];
@@ -81,9 +69,6 @@ typedef struct {
     CityEntry* entries;
     int        count;
 } CityLoadResult;
-
-/* ── Registry state machine ─────────────────────────────────────────────────
- */
 
 typedef enum {
     CITY_REGISTRY_STATE_INIT,
@@ -127,9 +112,6 @@ typedef struct {
     CityRegistryOnDone on_done;
 } CityRegistry;
 
-/* ── Output-reader state machine ────────────────────────────────────────────
- */
-
 typedef enum {
     CITY_OUTPUT_STATE_INIT,
     CITY_OUTPUT_STATE_LOCK,  /**< Open lock file, acquire LOCK_SH | LOCK_NB. */
@@ -147,6 +129,7 @@ typedef struct {
     int file_fd; /**< fd for the JSON output file.                */
 
     char city[256];      /**< City name (used to build the file path).    */
+    char price[16];      /**< Price zone e.g. "SE3" (used in file path).  */
     char file_path[512]; /**< Full path to the JSON file.                 */
 
     char*  read_buf;
@@ -159,9 +142,6 @@ typedef struct {
     void*            callback_context;
     CityOutputOnDone on_done;
 } CityOutputReader;
-
-/* ── Public API ─────────────────────────────────────────────────────────────
- */
 
 /**
  * @brief Synchronously load all non-expired cities from the registry CSV.
@@ -187,16 +167,18 @@ void city_registry_dispose(CityRegistry* reg);
  * @brief Start an async read of a city's compute-output JSON.
  *
  * Acquires a shared flock on COMPUTE_OUTPUT_LOCK (non-blocking, retries
- * each tick), reads the file for @p city, then fires @p on_done with the
- * heap-allocated content.  The callback owns the buffer and must free() it.
+ * each tick), reads the file for @p city + @p price zone, then fires
+ * @p on_done with the heap-allocated content.  The callback owns the
+ * buffer and must free() it.
  *
  * @param city      City name — must match the filename written by the parser.
+ * @param price     Price zone string e.g. "SE3" — included in filename.
  * @param context   Forwarded unchanged to @p on_done.
  * @param on_done   Completion callback. Must not be NULL.
  * @return 0 on successful task creation, -1 on argument / allocation error.
  */
-int city_output_read_initiate(const char* city, void* context,
-                              CityOutputOnDone on_done);
+int city_output_read_initiate(const char* city, const char* price,
+                              void* context, CityOutputOnDone on_done);
 
 /** @internal SMW task work function – do not call directly. */
 void city_output_reader_task_work(void* context, uint64_t mon_time);
@@ -204,4 +186,4 @@ void city_output_reader_task_work(void* context, uint64_t mon_time);
 /** Release all resources held by an output-reader context. */
 void city_output_reader_dispose(CityOutputReader* reader);
 
-#endif /* CITY_REGISTRY_H */
+#endif // CITY_REGISTRY_H

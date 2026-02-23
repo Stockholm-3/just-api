@@ -320,8 +320,12 @@ static void build_weather_path(const CityData* c, char* out, int out_len) {
 
 static int write_output(const CityData* c,
                         const bool      decisions[SLOTS_PER_DAY]) {
+    char zone_str[16];
+    snprintf(zone_str, sizeof(zone_str), "SE%d", c->price_zone + 1);
+
     char path[MAX_FILENAME];
-    snprintf(path, sizeof(path), "%s/%s.json", COMPUTE_OUTPUT_DIR, c->name);
+    snprintf(path, sizeof(path), "%s/%s-%s.json", COMPUTE_OUTPUT_DIR, c->name,
+             zone_str);
 
     int buy_count = 0;
     for (int i = 0; i < SLOTS_PER_DAY; i++) {
@@ -333,9 +337,6 @@ static int write_output(const CityData* c,
     json_object_set_new(root, "city", json_string(c->name));
     json_object_set_new(root, "latitude", json_real(c->latitude));
     json_object_set_new(root, "longitude", json_real(c->longitude));
-
-    char zone_str[16];
-    snprintf(zone_str, sizeof(zone_str), "SE%d", c->price_zone + 1);
     json_object_set_new(root, "price_zone", json_string(zone_str));
     json_object_set_new(root, "slots_total", json_integer(SLOTS_PER_DAY));
     json_object_set_new(root, "slots_buy", json_integer(buy_count));
@@ -361,10 +362,10 @@ static int write_output(const CityData* c,
     }
     json_object_set_new(root, "decisions", arr);
 
-    /* Write atomically: jansson writes to a temp file, then we rename */
+    /* Write atomically: write to a temp file, then rename */
     char tmp_path[MAX_FILENAME];
-    snprintf(tmp_path, sizeof(tmp_path), "%s/.%s.tmp", COMPUTE_OUTPUT_DIR,
-             c->name);
+    snprintf(tmp_path, sizeof(tmp_path), "%s/.%s-%s.tmp", COMPUTE_OUTPUT_DIR,
+             c->name, zone_str);
 
     if (json_dump_file(root, tmp_path, JSON_INDENT(2)) != 0) {
         LOG_ERROR(LOG_MODULE, "Failed to write temp output '%s': %s", tmp_path,

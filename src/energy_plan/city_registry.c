@@ -420,10 +420,6 @@ void city_registry_dispose(CityRegistry* reg) {
 }
 
 static void output_state_lock(CityOutputReader* r) {
-    /*
-     * Open the shared lock file.  O_CREAT means we don't fail if the parser
-     * has never run; we'll catch the missing output file in STATE_OPEN.
-     */
     if (r->lock_fd < 0) {
         r->lock_fd =
             open(COMPUTE_OUTPUT_LOCK, O_RDONLY | O_CREAT | O_NONBLOCK, 0644);
@@ -436,10 +432,9 @@ static void output_state_lock(CityOutputReader* r) {
         }
     }
 
-    /* Non-blocking shared lock – retry next tick if parser holds exclusive. */
     if (flock(r->lock_fd, LOCK_SH | LOCK_NB) != 0) {
         if (errno == EWOULDBLOCK) {
-            return; /* stay in LOCK state */
+            return;
         }
         LOG_WARN("CITY_OUTPUT", "flock(LOCK_SH) failed (errno %d)", errno);
         r->result = CITY_OUTPUT_LOCK_ERROR;
@@ -498,13 +493,11 @@ static void output_state_read(CityOutputReader* r) {
         }
         memcpy(r->read_buf + r->read_buf_size, chunk, (size_t)bytes);
         r->read_buf_size += (size_t)bytes;
-        return; /* keep reading */
+        return;
     }
 
-    /* EOF – NUL-terminate so the buffer is a valid C string */
     r->read_buf[r->read_buf_size] = '\0';
 
-    /* We have everything we need: release the lock immediately. */
     flock(r->lock_fd, LOCK_UN);
     close(r->lock_fd);
     r->lock_fd = -1;
@@ -514,8 +507,6 @@ static void output_state_read(CityOutputReader* r) {
     r->result = CITY_OUTPUT_OK;
     r->state  = CITY_OUTPUT_STATE_DONE;
 }
-
-/* ── task work function ─────────────────────────────────────────────────── */
 
 void city_output_reader_task_work(void* context, uint64_t mon_time) {
     (void)mon_time;
@@ -554,7 +545,6 @@ void city_output_reader_task_work(void* context, uint64_t mon_time) {
         break;
 
     case CITY_OUTPUT_STATE_ERROR:
-        /* Release lock/file if still held before firing callback */
         if (r->lock_fd >= 0) {
             flock(r->lock_fd, LOCK_UN);
             close(r->lock_fd);
@@ -574,11 +564,9 @@ void city_output_reader_task_work(void* context, uint64_t mon_time) {
     }
 }
 
-/* ── public initiate ────────────────────────────────────────────────────── */
-
-int city_output_read_initiate(const char* city, void* context,
-                              CityOutputOnDone on_done) {
-    if (!city || !on_done) {
+int city_output_read_initiate(const char* city, const char* price,
+                              void* context, CityOutputOnDone on_done) {
+    if (!city || !price || !on_done) {
         return -1;
     }
 
@@ -590,8 +578,11 @@ int city_output_read_initiate(const char* city, void* context,
     strncpy(r->city, city, sizeof(r->city) - 1);
     r->city[sizeof(r->city) - 1] = '\0';
 
-    snprintf(r->file_path, sizeof(r->file_path), "%s/%s.json",
-             COMPUTE_OUTPUT_DIR, city);
+    strncpy(r->price, price, sizeof(r->price) - 1);
+    r->price[sizeof(r->price) - 1] = '\0';
+
+    snprintf(r->file_path, sizeof(r->file_path), "%s/%s-%s.json",
+             COMPUTE_OUTPUT_DIR, city, price);
 
     r->lock_fd          = -1;
     r->file_fd          = -1;
@@ -607,8 +598,6 @@ int city_output_read_initiate(const char* city, void* context,
 
     return 0;
 }
-
-/* ── dispose ────────────────────────────────────────────────────────────── */
 
 void city_output_reader_dispose(CityOutputReader* r) {
     if (!r) {
