@@ -55,5 +55,5 @@ int handle_not_found(HTTPServerConnection* conn, const char* path) {
         "/v1/hourly?city=NAME&country=CODE&hours=24, "
         "GET /v1/weather?city=NAME&country=CODE, GET /v1/cities?query=SEARCH",
         path);
-    return send_json_error(conn, 404, msg);
+    return send_json_message(conn, 404, msg);
 }

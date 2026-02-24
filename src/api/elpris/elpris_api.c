@@ -232,9 +232,10 @@ static void on_http_response(const char* event, const char* response,
             LOG_WARN("ELPRIS", "Invalid response");
         }
 
-        send_json_error(ctx->conn, 503,
-                        "Unable to fetch electricity prices. "
-                        "The date may be unavailable or the service is down.");
+        send_json_message(
+            ctx->conn, 503,
+            "Unable to fetch electricity prices. "
+            "The date may be unavailable or the service is down.");
     }
 
     free(ctx);
@@ -253,7 +254,7 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
     /* Parse query */
     ParsedQuery parsed = parse_query(query);
     if (!parsed.valid) {
-        send_json_error(
+        send_json_message(
             conn, 400,
             "Invalid query. Format: ?price=SE3&date=2024-01-15. Note: date is "
             "optional, it will give lates price in absence");
@@ -289,7 +290,7 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
     /* Prepare async fetch */
     FetchContext* ctx = malloc(sizeof(FetchContext));
     if (!ctx) {
-        send_json_error(conn, 500, "Memory allocation failed");
+        send_json_message(conn, 500, "Memory allocation failed");
         return -1;
     }
 

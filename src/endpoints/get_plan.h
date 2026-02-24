@@ -34,23 +34,22 @@ static void on_output_read(void* context, CityOutputStatus status, char* buf,
         free(buf);
         break;
     case CITY_OUTPUT_NOT_FOUND: {
-        char err[1024];
-        snprintf(err, sizeof(err),
-                 "Compute output not yet available for city '%s'"
-                 "City '%s' is now registered and the data will be availiable "
-                 "within 1 hour",
-                 ctx->city, ctx->city);
-        send_json_error(ctx->conn, 503, err);
+        char response[1024];
+        snprintf(response, sizeof(response),
+                 "City '%s' has just been registered. "
+                 "Data will be available within 1 hour.",
+                 ctx->city);
+        send_json_message(ctx->conn, 202, response);
         break;
     }
     case CITY_OUTPUT_LOCK_ERROR:
-        send_json_error(ctx->conn, 503,
-                        "Energy output temporarily unavailable; "
-                        "could not acquire read lock. Please retry.");
+        send_json_message(ctx->conn, 503,
+                          "Energy output temporarily unavailable; "
+                          "could not acquire read lock. Please retry.");
         break;
     case CITY_OUTPUT_READ_ERROR:
-        send_json_error(ctx->conn, 500,
-                        "Internal error reading compute output.");
+        send_json_message(ctx->conn, 500,
+                          "Internal error reading compute output.");
         break;
     }
     free(ctx);
@@ -60,27 +59,27 @@ static void on_registry_done(void* context, CityRegisterStatus status) {
     PlanRequestContext* ctx = (PlanRequestContext*)context;
     if (city_output_read_initiate(ctx->city, ctx->price, ctx, on_output_read) !=
         0) {
-        send_json_error(ctx->conn, 500,
-                        "Internal error initiating output read.");
+        send_json_message(ctx->conn, 500,
+                          "Internal error initiating output read.");
         free(ctx);
     }
 }
 int handle_get_plan(HTTPServerConnection* conn, const char* query) {
     if (!query || *query == '\0') {
-        return send_json_error(conn, 400, "Missing query parameters");
+        return send_json_message(conn, 400, "Missing query parameters");
     }
     UrlQueryMap map;
     if (url_query_parse(query, &map) != 0) {
-        return send_json_error(conn, 400, "Invalid query parameters");
+        return send_json_message(conn, 400, "Invalid query parameters");
     }
     const char* city  = url_query_get(&map, "city");
     const char* price = url_query_get(&map, "price");
     if (!city || !price) {
-        return send_json_error(
+        return send_json_message(
             conn, 400, "Missing required parameters: city and/or price");
     }
     if (!is_allowed_price(price)) {
-        return send_json_error(
+        return send_json_message(
             conn, 400,
             "Invalid price parameter; must be SE1, SE2, SE3, or SE4");
     }
@@ -89,11 +88,11 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
     if (!coords.found) {
         char err[256];
         snprintf(err, sizeof(err), "City not found: %s", city);
-        return send_json_error(conn, 400, err);
+        return send_json_message(conn, 400, err);
     }
     PlanRequestContext* ctx = malloc(sizeof(PlanRequestContext));
     if (!ctx) {
-        return send_json_error(conn, 500, "Internal error");
+        return send_json_message(conn, 500, "Internal error");
     }
     ctx->conn = conn;
     strncpy(ctx->city, city, sizeof(ctx->city) - 1);
@@ -103,7 +102,7 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
     if (city_registry_initiate(CITY_REGISTRY_FILE, city, price, coords.lat,
                                coords.lon, ctx, on_registry_done) != 0) {
         free(ctx);
-        return send_json_error(conn, 500, "Internal error");
+        return send_json_message(conn, 500, "Internal error");
     }
     return 0;
 }

@@ -11,7 +11,7 @@ int handle_city_search(HTTPServerConnection* conn, const char* query) {
     weather_location_handler_search_cities(query, &json_response, &status_code);
 
     if (!json_response) {
-        return send_json_error(conn, 500, "Failed to search cities");
+        return send_json_message(conn, 500, "Failed to search cities");
     }
 
     int ret = send_response(conn, status_code, "application/json",
