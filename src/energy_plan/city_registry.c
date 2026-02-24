@@ -101,7 +101,8 @@ static void process_csv(CityRegistry* reg) {
         token                          = strtok_r(NULL, ",", &saveptr);
         reg->cities[idx].last_accessed = token ? (time_t)atoll(token) : now;
 
-        if (strcmp(reg->cities[idx].city, reg->city) == 0) {
+        if (strcmp(reg->cities[idx].city, reg->city) == 0 &&
+            strcmp(reg->cities[idx].price, reg->price) == 0) {
             exists_flag                    = 1;
             reg->cities[idx].last_accessed = now;
         }

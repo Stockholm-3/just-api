@@ -1,14 +1,17 @@
 #include "energy_plan/city_registry.h"
 #include "weather_location_parser.h"
 
+#include <ctype.h>
 #include <http_utils.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <url_query_parser.h>
+
 static const char* ALLOWED_PRICE_VALUES[] = {"SE1", "SE2", "SE3", "SE4"};
 #define NUM_ALLOWED_PRICES                                                     \
     (sizeof(ALLOWED_PRICE_VALUES) / sizeof(ALLOWED_PRICE_VALUES[0]))
+
 static int is_allowed_price(const char* value) {
     if (!value) {
         return 0;
@@ -20,11 +23,13 @@ static int is_allowed_price(const char* value) {
     }
     return 0;
 }
+
 typedef struct {
     HTTPServerConnection* conn;
     char                  city[256];
     char                  price[16];
 } PlanRequestContext;
+
 static void on_output_read(void* context, CityOutputStatus status, char* buf,
                            size_t len) {
     PlanRequestContext* ctx = (PlanRequestContext*)context;
@@ -54,6 +59,7 @@ static void on_output_read(void* context, CityOutputStatus status, char* buf,
     }
     free(ctx);
 }
+
 static void on_registry_done(void* context, CityRegisterStatus status) {
     (void)status;
     PlanRequestContext* ctx = (PlanRequestContext*)context;
@@ -64,6 +70,7 @@ static void on_registry_done(void* context, CityRegisterStatus status) {
         free(ctx);
     }
 }
+
 int handle_get_plan(HTTPServerConnection* conn, const char* query) {
     if (!query || *query == '\0') {
         return send_json_message(conn, 400, "Missing query parameters");
@@ -83,24 +90,38 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
             conn, 400,
             "Invalid price parameter; must be SE1, SE2, SE3, or SE4");
     }
-    Coordinates coords =
-        get_city_coordinates("data/swedish_cities_locations.csv", city);
+
+    char city_normalized[256];
+    strncpy(city_normalized, city, sizeof(city_normalized) - 1);
+    city_normalized[sizeof(city_normalized) - 1] = '\0';
+    for (int i = 0; city_normalized[i]; i++) {
+        city_normalized[i] = (char)tolower((unsigned char)city_normalized[i]);
+    }
+    if (city_normalized[0]) {
+        city_normalized[0] = (char)toupper((unsigned char)city_normalized[0]);
+    }
+
+    Coordinates coords = get_city_coordinates(
+        "data/swedish_cities_locations.csv", city_normalized);
     if (!coords.found) {
-        char err[256];
-        snprintf(err, sizeof(err), "City not found: %s", city);
+        char err[328];
+        snprintf(err, sizeof(err), "City not found: %s", city_normalized);
         return send_json_message(conn, 400, err);
     }
+
     PlanRequestContext* ctx = malloc(sizeof(PlanRequestContext));
     if (!ctx) {
         return send_json_message(conn, 500, "Internal error");
     }
     ctx->conn = conn;
-    strncpy(ctx->city, city, sizeof(ctx->city) - 1);
+    strncpy(ctx->city, city_normalized, sizeof(ctx->city) - 1);
     ctx->city[sizeof(ctx->city) - 1] = '\0';
     strncpy(ctx->price, price, sizeof(ctx->price) - 1);
     ctx->price[sizeof(ctx->price) - 1] = '\0';
-    if (city_registry_initiate(CITY_REGISTRY_FILE, city, price, coords.lat,
-                               coords.lon, ctx, on_registry_done) != 0) {
+
+    if (city_registry_initiate(CITY_REGISTRY_FILE, city_normalized, price,
+                               coords.lat, coords.lon, ctx,
+                               on_registry_done) != 0) {
         free(ctx);
         return send_json_message(conn, 500, "Internal error");
     }

@@ -1,5 +1,6 @@
 #include "logger.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <jansson.h>
@@ -314,7 +315,13 @@ static int load_elpris(const char* path, ElprisData* out) {
 }
 
 static void build_weather_path(const CityData* c, char* out, int out_len) {
-    snprintf(out, out_len, "%s/%s-%f-%f.json", COMPUTE_INPUT_DIR, c->name,
+    char name_lower[128];
+    strncpy(name_lower, c->name, sizeof(name_lower) - 1);
+    name_lower[sizeof(name_lower) - 1] = '\0';
+    for (int i = 0; name_lower[i]; i++) {
+        name_lower[i] = (char)tolower((unsigned char)name_lower[i]);
+    }
+    snprintf(out, out_len, "%s/%s-%f-%f.json", COMPUTE_INPUT_DIR, name_lower,
              c->latitude, c->longitude);
 }
 
