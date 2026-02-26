@@ -1,18 +1,18 @@
 SHELL := bash
 
 # ------------------------------------------------------------
-# Compiler + global settings
+# Toolchain
 # ------------------------------------------------------------
-CC          := gcc
-CXX         := g++
+CC  := gcc
+CXX := g++
 
-SRC_DIR     := src
-LIB_DIR     := lib
-INC_DIR     := includes
+SRC_DIR := src
+BIN_DIR := $(SRC_DIR)/bin
+LIB_DIR := lib
+INC_DIR := includes
 
-BUILD_MODE  ?= debug
-BUILD_DIR   := build/$(BUILD_MODE)
-BIN  := $(BUILD_DIR)/just-server
+BUILD_MODE ?= debug
+BUILD_DIR  := build/$(BUILD_MODE)
 
 # ------------------------------------------------------------
 # Build configuration
@@ -25,126 +25,164 @@ else
     BUILD_TYPE  := Debug
 endif
 
-# ------------------------------------------------------------
-# Include directories
-# ------------------------------------------------------------
-SRC_INCLUDES := $(shell find $(SRC_DIR) -type d)
-LIB_INCLUDES := $(shell find -L $(LIB_DIR) -type d)
+# Strict flags for YOUR source code
+CFLAGS_STRICT := $(CFLAGS_BASE) -Wall -Wextra -MMD -MP
 
-# ------------------------------------------------------------
-# Compiler flags
-# ------------------------------------------------------------
+# Loose flags for third-party libraries
+CFLAGS_LOOSE   := -O2 -w
+CXXFLAGS_LOOSE := -O2 -w -std=c++11
 
-INCLUDES := $(addprefix -I,$(SRC_INCLUDES)) $(addprefix -I,$(LIB_INCLUDES)) -I$(INC_DIR)
-#POSIX_FLAGS := -D_POSIX_C_SOURCE=200809L
-
-CFLAGS_SRC   := $(CFLAGS_BASE) -Wall -Werror -Wfatal-errors -MMD -MP $(INCLUDES)
-CFLAGS_LIB   := $(CFLAGS_BASE) -w $(INCLUDES)
-CXXFLAGS_LIB := $(CFLAGS_BASE) -w -std=c++11 $(INCLUDES)
+INCLUDES := -I$(INC_DIR) \
+            $(shell find $(SRC_DIR) -type d | sed 's/^/-I/') \
+            $(shell find -L $(LIB_DIR) -type d | sed 's/^/-I/')
 
 LDFLAGS :=
-LIBS    := -lmbedtls -lmbedx509 -lmbedcrypto -pthread -lstdc++
+LIBS := -lmbedtls -lmbedx509 -lmbedcrypto -pthread -lstdc++
 
 # ------------------------------------------------------------
-# Source and object files
+# Auto-discover binaries
 # ------------------------------------------------------------
-SRC_FILES     := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*' ! -path '*/algostuff*' ! -path '*/compute*')
-LIB_FILES     := $(shell find -L $(LIB_DIR) -type f -name '*.c'   ! -path '*/weather/*')
-LIB_CPP_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.cpp' ! -path '*/weather/*')
-
-OBJ_SRC     := $(patsubst %.c,  $(BUILD_DIR)/%.o, $(SRC_FILES))
-OBJ_LIB     := $(patsubst %.c,  $(BUILD_DIR)/%.o, $(LIB_FILES))
-OBJ_LIB_CPP := $(patsubst %.cpp,$(BUILD_DIR)/%.o, $(LIB_CPP_FILES))
-OBJ         := $(OBJ_SRC) $(OBJ_LIB) $(OBJ_LIB_CPP)
+BIN_NAMES   := $(notdir $(wildcard $(BIN_DIR)/*))
+ALL_TARGETS := $(addprefix $(BUILD_DIR)/,$(BIN_NAMES))
 
 # ------------------------------------------------------------
-# Watchdog binary
+# Shared sources (everything except src/bin)
 # ------------------------------------------------------------
-WATCHDOG_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c' ! -path '*/algostuff*' ! -path '*/compute*')
-WATCHDOG_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(WATCHDOG_SRC))
-WATCHDOG_BIN := $(BUILD_DIR)/jws-watchdog
+CORE_SRC := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '$(BIN_DIR)/*')
+CORE_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(CORE_SRC))
+
+LIB_SRC     := $(shell find -L $(LIB_DIR) -type f -name '*.c')
+LIB_CPP_SRC := $(shell find -L $(LIB_DIR) -type f -name '*.cpp')
+
+LIB_OBJ     := $(patsubst %.c,$(BUILD_DIR)/%.o,$(LIB_SRC))
+LIB_CPP_OBJ := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(LIB_CPP_SRC))
+
+COMMON_OBJ := $(CORE_OBJ) $(LIB_OBJ) $(LIB_CPP_OBJ)
 
 # ------------------------------------------------------------
-# Compute binary
-# ------------------------------------------------------------
-COMPUTE_SRC := $(shell find src -type f -name '*.c' ! -name 'main.c' ! -path '*/algostuff*' ! -path '*/watchdog*')
-COMPUTE_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(COMPUTE_SRC))
-COMPUTE_BIN := $(BUILD_DIR)/compute
-
-# ------------------------------------------------------------
-# Build rules
+# Default target: build everything
 # ------------------------------------------------------------
 .PHONY: all
-all: $(BIN) $(WATCHDOG_BIN) $(COMPUTE_BIN)
-	@echo "Build complete. [$(BUILD_TYPE)]"
+all: $(ALL_TARGETS)
+	@echo "Built all binaries [$(BUILD_TYPE)]"
 
-.PHONY: watchdog
-watchdog: $(WATCHDOG_BIN)
-	@echo "Watchdog build complete. [$(BUILD_TYPE)]"
+# Pattern rule to build any discovered binary
+$(BUILD_DIR)/%:
+	@$(MAKE) --no-print-directory BIN=$* build
 
-# Build watchdog binary
-$(WATCHDOG_BIN): $(WATCHDOG_OBJ) $(OBJ_LIB) $(OBJ_LIB_CPP)
+# ------------------------------------------------------------
+# Single binary build
+# ------------------------------------------------------------
+ifeq ($(filter build run,$(MAKECMDGOALS)),build run)
+ifndef BIN
+$(error Please specify BIN=<name>. Available: $(BIN_NAMES))
+endif
+endif
+
+TARGET := $(BUILD_DIR)/$(BIN)
+
+BIN_SRC := $(shell find $(BIN_DIR)/$(BIN) -type f -name '*.c')
+BIN_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(BIN_SRC))
+
+.PHONY: build
+build: $(TARGET)
+	@echo "Built $(BIN) [$(BUILD_TYPE)]"
+
+$(TARGET): $(COMMON_OBJ) $(BIN_OBJ)
 	@mkdir -p $(dir $@)
-	@echo "Linking watchdog..."
-	@$(CC) $(LDFLAGS) $^ -o $@ $(LIBS)
+	@echo "[LD]  $(TARGET)"
+	@$(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
 
-$(COMPUTE_BIN): $(COMPUTE_OBJ) $(OBJ_LIB) $(OBJ_LIB_CPP)
-	@mkdir -p $(dir $@)
-	@echo "Linking compute..."
-	@$(CC) $(LDFLAGS) $^ -o $@ $(LIBS)
+# ------------------------------------------------------------
+# Compilation rules with progress output
+# ------------------------------------------------------------
 
-# Link server binary
-$(BIN): $(OBJ)
-	@mkdir -p $(dir $@)
-	@$(CXX) $(LDFLAGS) $(OBJ) -o $@ $(LIBS)
-
-# Compile project sources (strict flags)
+# ---- Strict project compilation (src/) ----
 $(BUILD_DIR)/src/%.o: src/%.c
-	@echo "Compiling project $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS_SRC) -c $< -o $@
+	@echo "[CC]  $<"
+	@$(CC) $(CFLAGS_STRICT) $(INCLUDES) -c $< -o $@
 
-# Compile library sources (relaxed flags)
+# ---- Loose third-party C compilation (lib/) ----
 $(BUILD_DIR)/lib/%.o: lib/%.c
-	@echo "Compiling library $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS_LIB) -c $< -o $@
+	@echo "[CC]  $<"
+	@$(CC) $(CFLAGS_LOOSE) $(INCLUDES) -c $< -o $@
 
-# Compile library C++ sources (relaxed flags)
+# ---- Loose third-party C++ compilation (lib/) ----
 $(BUILD_DIR)/lib/%.o: lib/%.cpp
-	@echo "Compiling library $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS_LIB) -c $< -o $@
+	@echo "[CXX] $<"
+	@$(CXX) $(CXXFLAGS_LOOSE) $(INCLUDES) -c $< -o $@
+
+# ------------------------------------------------------------
+# Run selected binary
+# ------------------------------------------------------------
+ARGS ?=
+
+.PHONY: run
+run: build
+	@echo "Running $(BIN)..."
+	@./$(TARGET) $(ARGS)
+
+# ------------------------------------------------------------
+# Daemon management
+# ------------------------------------------------------------
+WATCHDOG := $(BUILD_DIR)/watchdog
+SERVER   := $(BUILD_DIR)/server
+COMPUTE  := $(BUILD_DIR)/compute
+
+.PHONY: daemon-start
+daemon-start: $(WATCHDOG) $(SERVER) $(COMPUTE)
+	@if [ -f /tmp/watchdog.pid ]; then \
+		PID=$$(cat /tmp/watchdog.pid); \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "Watchdog already running (PID $$PID)"; \
+			exit 1; \
+		fi; \
+	fi
+	@echo "Starting watchdog..."
+	@$(WATCHDOG) \
+		--server $(SERVER) \
+		--compute $(COMPUTE) \
+		-- $(ARGS)
+
+.PHONY: daemon-stop
+daemon-stop:
+	@if [ -f /tmp/watchdog.pid ]; then \
+		PID=$$(cat /tmp/watchdog.pid); \
+		kill $$PID 2>/dev/null || true; \
+		rm -f /tmp/watchdog.pid; \
+		echo "Stopped."; \
+	else \
+		echo "Watchdog not running."; \
+	fi
+
+.PHONY: daemon-status
+daemon-status:
+	@if [ -f /tmp/watchdog.pid ]; then \
+		PID=$$(cat /tmp/watchdog.pid); \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "Watchdog running (PID $$PID)"; \
+		else \
+			echo "Stale PID file."; \
+		fi; \
+	else \
+		echo "Watchdog not running."; \
+	fi
 
 # ------------------------------------------------------------
 # Utilities
 # ------------------------------------------------------------
-.PHONY: run
-run: $(BIN)
-	@echo "Running $(BIN)..."
-	@./$(BIN)
-
 .PHONY: clean
 clean:
-	@rm -rf build
-	@echo "Cleaned build artifacts."
+	rm -rf build
 
-# ------------------------------------------------------------
-# Start server in detached tmux session
-# ------------------------------------------------------------
-.PHONY: start-server
-start-server: $(BIN)
-	@SESSION_NAME=just-server; \
-	if tmux has-session -t $$SESSION_NAME 2>/dev/null; then \
-		echo "Session '$$SESSION_NAME' already exists. Attaching..."; \
-		tmux attach -t $$SESSION_NAME; \
-	else \
-		echo "Starting server in detached tmux session '$$SESSION_NAME'..."; \
-		tmux new -d -s $$SESSION_NAME './$(BIN)'; \
-		echo "Server started in tmux session '$$SESSION_NAME'."; \
-	fi
+.PHONY: list
+list:
+	@echo "Available binaries:"
+	@for b in $(BIN_NAMES); do echo "  $$b"; done
 
-# Show formatting errors without modifying files
 .PHONY: format
 format:
 	@echo "Checking formatting..."
@@ -223,6 +261,7 @@ lint-ci:
 .PHONY: install-lib
 install-lib:
 	git clone https://github.com/stockholm-3/lib.git ../lib
+
 # ------------------------------------------------------------
 # Documentation
 # ------------------------------------------------------------
@@ -243,86 +282,3 @@ docs-open:
 	@echo "Opening documentation..."
 	@xdg-open documentation/html/index.html
 	@echo "Documentation opened in default browser."
-
-# ------------------------------------------------------------
-# Daemon management
-# ------------------------------------------------------------
-.PHONY: daemon-start
-daemon-start:
-	@if [ ! -x $(WATCHDOG_BIN) ] || [ ! -x $(BIN) ]; then \
-		echo "Binaries not found, building..."; \
-		$(MAKE) all; \
-	fi
-	@if [ -f /tmp/watchdog.pid ]; then \
-		PID=$$(cat /tmp/watchdog.pid); \
-		if kill -0 $$PID 2>/dev/null; then \
-			echo "Watchdog already running (PID $$PID)"; \
-			exit 1; \
-		fi; \
-	fi
-	@echo "Starting watchdog daemon..."
-	@$(WATCHDOG_BIN) --server $(BIN) --compute $(COMPUTE_BIN)
-	@sleep 1
-	@if [ -f /tmp/watchdog.pid ]; then \
-		echo "Watchdog started (PID $$(cat /tmp/watchdog.pid))"; \
-	fi
-
-.PHONY: daemon-stop
-daemon-stop:
-	@if [ -f /tmp/watchdog.pid ]; then \
-		PID=$$(cat /tmp/watchdog.pid); \
-		echo "Stopping watchdog (PID $$PID)..."; \
-		kill $$PID 2>/dev/null || true; \
-		sleep 2; \
-		if kill -0 $$PID 2>/dev/null; then \
-			echo "Force killing..."; \
-			kill -9 $$PID 2>/dev/null || true; \
-		fi; \
-		rm -f /tmp/watchdog.pid; \
-		echo "Stopped."; \
-	else \
-		echo "Watchdog not running."; \
-	fi
-
-.PHONY: daemon-status
-daemon-status:
-	@if [ -f /tmp/watchdog.pid ]; then \
-		PID=$$(cat /tmp/watchdog.pid); \
-		if kill -0 $$PID 2>/dev/null; then \
-			echo "Watchdog running (PID $$PID)"; \
-			SERVER_PID=$$(pgrep -P $$PID just-server 2>/dev/null || echo "none"); \
-			echo "Server PID: $$SERVER_PID"; \
-		else \
-			echo "Watchdog not running (stale PID file)"; \
-		fi; \
-	else \
-		echo "Watchdog not running."; \
-	fi
-
-.PHONY: daemon-restart
-daemon-restart: stop-daemon start-daemon
-
-# ------------------------------------------------------------
-# Run watchdog in foreground (for debugging)
-# ------------------------------------------------------------
-
-.PHONY: watchdog-foreground
-watchdog-foreground: $(WATCHDOG_BIN) $(BIN)
-	@echo "Running watchdog in foreground..."
-	@$(WATCHDOG_BIN) --server $(BIN) --foreground
-
-# Client standalone build
-.PHONY: run-client
-run-client:
-	@echo "Building and running weather client..."
-	@gcc -Wall -Wextra -std=c99 -D_POSIX_C_SOURCE=200809L \
-		-DWEATHER_CLIENT_MAIN \
-		-I./src/client -Iincludes \
-		$(shell pkg-config --cflags libcurl) \
-		src/client/weather_client.c \
-		src/client/weather_client_smw.c \
-		$(shell pkg-config --libs libcurl) -ljansson -lm \
-		-o /tmp/weather_client && /tmp/weather_client http://localhost:10680/v1 Stockholm SE
-
-.PHONY: start-client
-start-client: run-client
