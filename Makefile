@@ -51,12 +51,12 @@ LIBS    := -lmbedtls -lmbedx509 -lmbedcrypto
 SRC_FILES := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '*/watchdog/*' ! -path '*/client/*' ! -path '*/energy_plan/fetch_scheduler.c')
 LIB_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.c' ! -path '*/weather/*')
 LIB_CPP_FILES := $(shell find -L $(LIB_DIR) -type f -name '*.cpp')
-CPP_SRC_FILES := $(shell find cpp/src -type f -name '*.cpp' ! -name 'main.cpp')
+CPP_SRC_FILES := $(shell find $(SRC_DIR)/cpp/src -type f -name '*.cpp' ! -name 'main.cpp')
 
 OBJ_SRC := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRC_FILES))
 OBJ_LIB := $(patsubst %.c,$(BUILD_DIR)/%.o,$(LIB_FILES))
 OBJ_LIB_CPP := $(patsubst %.cpp,$(BUILD_DIR)/cpp/%.o,$(LIB_CPP_FILES))
-OBJ_CPP_SRC := $(patsubst cpp/%.cpp,$(BUILD_DIR)/cpp/%.o,$(CPP_SRC_FILES))
+OBJ_CPP_SRC := $(patsubst $(SRC_DIR)/cpp/src/%.cpp,$(BUILD_DIR)/cpp_src/%.o,$(CPP_SRC_FILES))
 OBJ     := $(OBJ_SRC) $(OBJ_LIB) $(OBJ_LIB_CPP) $(OBJ_CPP_SRC)
 
 # ------------------------------------------------------------
@@ -103,12 +103,13 @@ $(BUILD_DIR)/lib/%.o: lib/%.c
 $(BUILD_DIR)/cpp/%.o: %.cpp
 	@echo "Compiling library C++ $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS_LIB) -std=c++17 -Icpp/include -c $< -o $@
+	@$(CXX) $(CXXFLAGS_LIB) -std=c++17 -I$(SRC_DIR)/cpp/include -c $< -o $@
 
-$(BUILD_DIR)/cpp/src/%.o: cpp/src/%.cpp
+
+$(BUILD_DIR)/cpp_src/%.o: src/cpp/src/%.cpp
 	@echo "Compiling C++ $<... [$(BUILD_TYPE)]"
 	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS_LIB) -std=c++17 -Icpp/include -c $< -o $@
+	@$(CXX) $(CXXFLAGS_LIB) -std=c++17 -I$(SRC_DIR)/cpp/include -c $< -o $@
 
 # ------------------------------------------------------------
 # Utilities
