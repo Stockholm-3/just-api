@@ -162,7 +162,7 @@ static int test_destroy_null(void) {
 }
 
 static int test_submit_null_pool(void) {
-    ThreadPoolTask* t = thread_pool_submit(NULL, NULL, NULL, NULL, NULL, 0);
+    ThreadPoolTask* t = thread_pool_submit(NULL, NULL, NULL, NULL, NULL, 0, 0);
     TEST_ASSERT(t == NULL);
     return 0;
 }
@@ -173,7 +173,7 @@ static int test_work_fn_executes(void) {
     ThreadPool*  pool    = thread_pool_create(1, 0);
     volatile int counter = 0;
 
-    thread_pool_submit(pool, work_increment, (void*)&counter, NULL, NULL, 0);
+    thread_pool_submit(pool, work_increment, (void*)&counter, NULL, NULL, 0, 0);
     thread_pool_wait_idle(pool);
     thread_pool_destroy(pool);
 
@@ -186,7 +186,7 @@ static int test_work_fn_null(void) {
     g_done_status = -999;
 
     ThreadPool* pool = thread_pool_create(1, 0);
-    thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0);
+    thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0, 0);
     thread_pool_wait_idle(pool);
     thread_pool_process_completions(pool);
     thread_pool_destroy(pool);
@@ -201,7 +201,7 @@ static int test_done_fn_receives_status(void) {
     g_done_status = -999;
 
     ThreadPool* pool = thread_pool_create(1, 0);
-    thread_pool_submit(pool, work_return42, NULL, done_capture, NULL, 0);
+    thread_pool_submit(pool, work_return42, NULL, done_capture, NULL, 0, 0);
     thread_pool_wait_idle(pool);
     thread_pool_process_completions(pool);
     thread_pool_destroy(pool);
@@ -219,7 +219,7 @@ static int test_many_tasks(void) {
 
     for (int i = 0; i < N; i++) {
         ThreadPoolTask* t = thread_pool_submit(
-            pool, work_increment, (void*)&counters[i], NULL, NULL, 0);
+            pool, work_increment, (void*)&counters[i], NULL, NULL, 0, 0);
         TEST_ASSERT(t != NULL);
     }
 
@@ -243,7 +243,7 @@ static int test_cancel_queued_task(void) {
     /* 1 worker: task1 blocks the worker, task2 sits in queue */
     ThreadPool* pool = thread_pool_create(1, 0);
 
-    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0, 0);
 
     /* Wait until worker picks up task1 */
     while (!g_task_started) {
@@ -252,7 +252,7 @@ static int test_cancel_queued_task(void) {
 
     /* task2 is now queued — cancel it before the worker reaches it */
     ThreadPoolTask* task2 =
-        thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0);
+        thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0, 0);
     TEST_ASSERT(task2 != NULL);
     thread_pool_cancel(task2);
 
@@ -281,7 +281,7 @@ static int test_task_is_cancelled(void) {
 
     /* Submit a task that polls thread_pool_task_is_cancelled() cooperatively */
     ThreadPoolTask* task =
-        thread_pool_submit(pool, work_cooperative_cancel, NULL, NULL, NULL, 0);
+        thread_pool_submit(pool, work_cooperative_cancel, NULL, NULL, NULL, 0, 0);
     TEST_ASSERT(task != NULL);
 
     /* Wait until work_fn has started, then cancel mid-execution */
@@ -303,7 +303,7 @@ static int test_remaining_ms_no_timeout(void) {
     g_remaining_result = -999;
 
     ThreadPool* pool = thread_pool_create(1, 0);
-    thread_pool_submit(pool, work_check_remaining, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_check_remaining, NULL, NULL, NULL, 0, 0);
     thread_pool_wait_idle(pool);
     thread_pool_destroy(pool);
 
@@ -315,7 +315,7 @@ static int test_remaining_ms_with_timeout(void) {
     g_remaining_result = -999;
 
     ThreadPool* pool = thread_pool_create(1, 0);
-    thread_pool_submit(pool, work_check_remaining, NULL, NULL, NULL, 5000);
+    thread_pool_submit(pool, work_check_remaining, NULL, NULL, NULL, 5000, 0);
     thread_pool_wait_idle(pool);
     thread_pool_destroy(pool);
 
@@ -332,7 +332,7 @@ static int test_timeout_fires(void) {
      * the worker picks it up the deadline will have passed. */
     ThreadPool* pool = thread_pool_create(1, 0);
 
-    thread_pool_submit(pool, work_sleep50ms, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_sleep50ms, NULL, NULL, NULL, 0, 0);
 
     /* Wait until task1 is actually running */
     while (!g_task_started) {
@@ -340,7 +340,7 @@ static int test_timeout_fires(void) {
     }
 
     /* Submit task2 with a 1ms timeout while the worker is busy for ~50ms */
-    thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 1);
+    thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 1, 0);
 
     thread_pool_wait_idle(pool);
     thread_pool_process_completions(pool);
@@ -370,7 +370,7 @@ static int test_stats_after_task(void) {
     ThreadPool*  pool    = thread_pool_create(1, 0);
     volatile int counter = 0;
 
-    thread_pool_submit(pool, work_increment, (void*)&counter, NULL, NULL, 0);
+    thread_pool_submit(pool, work_increment, (void*)&counter, NULL, NULL, 0, 0);
     thread_pool_wait_idle(pool);
 
     ThreadPoolStats s;
@@ -387,12 +387,12 @@ static int test_stats_completed_includes_cancelled(void) {
 
     /* 1 worker: task1 blocks it, task2 is queued and then cancelled */
     ThreadPool* pool = thread_pool_create(1, 0);
-    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0, 0);
     while (!g_task_started) {
         usleep(100);
     }
 
-    ThreadPoolTask* t2 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
+    ThreadPoolTask* t2 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0, 0);
     TEST_ASSERT(t2 != NULL);
     thread_pool_cancel(t2);
 
@@ -413,12 +413,12 @@ static int test_stats_completed_includes_timeout(void) {
 
     /* 1 worker: task1 sleeps 50ms, task2 has 1ms timeout */
     ThreadPool* pool = thread_pool_create(1, 0);
-    thread_pool_submit(pool, work_sleep50ms, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_sleep50ms, NULL, NULL, NULL, 0, 0);
     while (!g_task_started) {
         usleep(100);
     }
 
-    thread_pool_submit(pool, NULL, NULL, NULL, NULL, 1);
+    thread_pool_submit(pool, NULL, NULL, NULL, NULL, 1, 0);
 
     thread_pool_wait_idle(pool);
 
@@ -450,7 +450,7 @@ static int test_process_completions(void) {
     ThreadPool*  pool     = thread_pool_create(1, 0);
 
     thread_pool_submit(pool, work_return42, NULL, done_capture_arg,
-                       (void*)&sentinel, 0);
+                       (void*)&sentinel, 0, 0);
     thread_pool_wait_idle(pool);
     thread_pool_process_completions(pool);
     thread_pool_destroy(pool);
@@ -475,7 +475,7 @@ static int test_process_completions_count(void) {
 
     for (int i = 0; i < N; i++) {
         thread_pool_submit(pool, NULL, NULL, done_capture_arg,
-                           (void*)&statuses[i], 0);
+                           (void*)&statuses[i], 0, 0);
     }
     thread_pool_wait_idle(pool);
     int n = thread_pool_process_completions(pool);
@@ -498,17 +498,17 @@ static int test_max_pending_rejects(void) {
     ThreadPool* pool = thread_pool_create(1, 1);
 
     /* task1 blocks the worker */
-    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0, 0);
     while (!g_task_started) {
         usleep(100);
     }
 
     /* task2 fills the pending slot */
-    ThreadPoolTask* t2 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
+    ThreadPoolTask* t2 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0, 0);
     TEST_ASSERT(t2 != NULL);
 
     /* task3 must be rejected — queue is full */
-    ThreadPoolTask* t3 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
+    ThreadPoolTask* t3 = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0, 0);
     TEST_ASSERT(t3 == NULL);
 
     g_task_release = 1;
@@ -529,7 +529,7 @@ static int test_wait_idle_then_process_stress(void) {
     for (int i = 0; i < ITERS; i++) {
         g_done_called    = 0;
         ThreadPool* pool = thread_pool_create(1, 0);
-        thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0);
+        thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0, 0);
         thread_pool_wait_idle(pool);
         thread_pool_process_completions(pool);
         thread_pool_destroy(pool);
@@ -552,14 +552,14 @@ static int test_stats_active_pending_consistent(void) {
     g_task_release = 0;
 
     ThreadPool* pool = thread_pool_create(1, 0);
-    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0, 0);
     while (!g_task_started) {
         usleep(100);
     }
 
     /* Queue 3 more tasks while the single worker is blocked */
     for (int i = 0; i < 3; i++) {
-        ThreadPoolTask* t = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0);
+        ThreadPoolTask* t = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0, 0);
         TEST_ASSERT(t != NULL);
     }
 
@@ -590,7 +590,7 @@ static int test_work_queue_fifo(void) {
     ThreadPool* pool = thread_pool_create(1, 0);
     for (int i = 0; i < N; i++) {
         ThreadPoolTask* t =
-            thread_pool_submit(pool, work_record_order, &ids[i], NULL, NULL, 0);
+            thread_pool_submit(pool, work_record_order, &ids[i], NULL, NULL, 0, 0);
         TEST_ASSERT(t != NULL);
     }
     thread_pool_wait_idle(pool);
@@ -614,7 +614,7 @@ static int test_work_queue_drains_on_destroy(void) {
 
     /* 1 worker: task0 blocks it while task1..2 pile up in the queue */
     ThreadPool* pool = thread_pool_create(1, 0);
-    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0, 0);
 
     while (!g_task_started) {
         usleep(100);
@@ -622,7 +622,7 @@ static int test_work_queue_drains_on_destroy(void) {
 
     for (int i = 0; i < 3; i++) {
         ThreadPoolTask* t =
-            thread_pool_submit(pool, work_record_order, &ids[i], NULL, NULL, 0);
+            thread_pool_submit(pool, work_record_order, &ids[i], NULL, NULL, 0, 0);
         TEST_ASSERT(t != NULL);
     }
 
@@ -635,6 +635,55 @@ static int test_work_queue_drains_on_destroy(void) {
     return 0;
 }
 
+/* WorkQueue: HIGH-priority tasks must execute before LOW-priority tasks
+ * even when LOW tasks were submitted first. */
+static int test_work_queue_priority(void) {
+    g_task_started = 0;
+    g_task_release = 0;
+    g_order_idx    = 0;
+    memset((void*)g_order, -1, sizeof(g_order));
+
+    int lo_ids[3] = {10, 11, 12};
+    int hi_ids[3] = {20, 21, 22};
+
+    /* 1 worker: blocking task holds it while we queue lo and hi tasks */
+    ThreadPool* pool = thread_pool_create(1, 0);
+    thread_pool_submit(pool, work_blocking, NULL, NULL, NULL, 0, 0);
+
+    while (!g_task_started) {
+        usleep(100);
+    }
+
+    /* Submit LOW-priority tasks first */
+    for (int i = 0; i < 3; i++) {
+        ThreadPoolTask* t =
+            thread_pool_submit(pool, work_record_order, &lo_ids[i], NULL, NULL, 0, -1);
+        TEST_ASSERT(t != NULL);
+    }
+
+    /* Submit HIGH-priority tasks after — they should run first */
+    for (int i = 0; i < 3; i++) {
+        ThreadPoolTask* t =
+            thread_pool_submit(pool, work_record_order, &hi_ids[i], NULL, NULL, 0, 0);
+        TEST_ASSERT(t != NULL);
+    }
+
+    g_task_release = 1;
+    thread_pool_wait_idle(pool);
+    thread_pool_destroy(pool);
+
+    TEST_ASSERT_EQ(g_order_idx, 6);
+    /* First 3 slots: HIGH tasks (20, 21, 22) */
+    TEST_ASSERT_EQ((int)g_order[0], 20);
+    TEST_ASSERT_EQ((int)g_order[1], 21);
+    TEST_ASSERT_EQ((int)g_order[2], 22);
+    /* Last 3 slots: LOW tasks (10, 11, 12) */
+    TEST_ASSERT_EQ((int)g_order[3], 10);
+    TEST_ASSERT_EQ((int)g_order[4], 11);
+    TEST_ASSERT_EQ((int)g_order[5], 12);
+    return 0;
+}
+
 /* CompletionQueue: done tasks accumulate in the queue and are NOT dispatched
  * until thread_pool_process_completions() is called. */
 static int test_completion_queue_accumulates(void) {
@@ -643,7 +692,7 @@ static int test_completion_queue_accumulates(void) {
 
     ThreadPool* pool = thread_pool_create(2, 0);
     for (int i = 0; i < N; i++) {
-        thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0);
+        thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0, 0);
     }
     thread_pool_wait_idle(pool);
 
@@ -666,7 +715,7 @@ static int test_completion_queue_cleared_on_destroy(void) {
 
     ThreadPool* pool = thread_pool_create(2, 0);
     for (int i = 0; i < N; i++) {
-        thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0);
+        thread_pool_submit(pool, NULL, NULL, done_capture, NULL, 0, 0);
     }
     thread_pool_wait_idle(pool);
 
@@ -727,6 +776,7 @@ int main(void) {
     /* Queue behaviour */
     RUN_TEST(test_work_queue_fifo);
     RUN_TEST(test_work_queue_drains_on_destroy);
+    RUN_TEST(test_work_queue_priority);
     RUN_TEST(test_completion_queue_accumulates);
     RUN_TEST(test_completion_queue_cleared_on_destroy);
 

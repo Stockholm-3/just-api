@@ -1,4 +1,6 @@
 #include "config/config_parser.h"
+#include "energy_plan/compute.h"
+#include "energy_plan/fetch_scheduler.h"
 #include "logger/logger.h"
 #include "smw.h"
 #include "thread_pool.h"
@@ -89,23 +91,47 @@ int main(int argc, char* argv[]) {
 
     smw_init();
 
-    /* Initialize thread pool */
-    ThreadPool* pool = thread_pool_create(config.thread_pool.num_workers,
-                                          config.thread_pool.max_pending);
+    /* Single pool: high-priority for HTTP requests, low-priority for compute */
+    int total = config.thread_pool.num_workers;
+
+    ThreadPool* pool =
+        thread_pool_create(total, config.thread_pool.max_pending);
     if (!pool) {
         LOG_ERROR("MAIN", "Failed to create thread pool");
         smw_dispose();
         logger_shutdown();
         return 1;
     }
-    LOG_INFO("MAIN", "Thread pool created (%d workers, max_pending=%d)",
-             config.thread_pool.num_workers, config.thread_pool.max_pending);
+    LOG_INFO("MAIN", "Thread pool created (%d workers)", total);
 
     /* SMW task: drain completion queue every event-loop cycle */
     smw_create_task(pool, thread_pool_smw_callback);
 
+    /* In-process fetch scheduler */
+    ComputeConfig comp_cfg;
+    strncpy(comp_cfg.cities_csv, config.compute.cities_csv,
+            sizeof(comp_cfg.cities_csv) - 1);
+    strncpy(comp_cfg.compute_input_dir, config.compute.compute_input_dir,
+            sizeof(comp_cfg.compute_input_dir) - 1);
+    strncpy(comp_cfg.elpris_json, config.compute.elpris_json,
+            sizeof(comp_cfg.elpris_json) - 1);
+    strncpy(comp_cfg.output_dir, config.compute.output_dir,
+            sizeof(comp_cfg.output_dir) - 1);
+    strncpy(comp_cfg.lock_file, config.compute.lock_file,
+            sizeof(comp_cfg.lock_file) - 1);
+
+    FetchScheduler* scheduler = fetch_scheduler_create(pool, &comp_cfg);
+    if (!scheduler) {
+        LOG_ERROR("MAIN", "Failed to create fetch scheduler");
+        thread_pool_destroy(pool);
+        smw_dispose();
+        logger_shutdown();
+        return 1;
+    }
+    smw_create_task(scheduler, fetch_scheduler_smw_callback);
+
     WeatherServer server;
-    weather_server_initiate(&server);
+    weather_server_initiate(&server, pool);
 
     LOG_INFO("MAIN", "Server started on port 10680 (PID %d)", getpid());
 
@@ -115,10 +141,14 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO("MAIN", "Shutdown signal received, cleaning up...");
     weather_server_dispose(&server);
+
+    fetch_scheduler_destroy(scheduler);
+
     thread_pool_wait_idle(pool);
     thread_pool_process_completions(pool);
     thread_pool_destroy(pool);
     LOG_INFO("MAIN", "Thread pool destroyed");
+
     smw_dispose();
 
     logger_shutdown();

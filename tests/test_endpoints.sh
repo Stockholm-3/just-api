@@ -29,7 +29,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Starting server..."
-./build/debug/just-server &
+./build/debug/server &
 SERVER_PID=$!
 
 # Wait for server to be ready
@@ -52,6 +52,41 @@ fi
 echo ""
 echo "Running endpoint tests..."
 echo "========================="
+
+test_endpoint_2xx() {
+    local method="$1"
+    local path="$2"
+    local expect_body="$3"
+    local label="$method $path"
+
+    local response
+    local http_code
+    local body
+
+    response=$(curl -s -w "\n%{http_code}" "$BASE_URL$path" 2>/dev/null)
+    http_code=$(echo "$response" | tail -1)
+    body=$(echo "$response" | sed '$d')
+
+    if [ "$http_code" != "200" ] && [ "$http_code" != "202" ] && [ "$http_code" != "204" ]; then
+        echo "FAIL  $label  (expected 2xx, got $http_code)"
+        FAILED=$((FAILED + 1))
+        FAILED_LIST="${FAILED_LIST}    $label  (expected 2xx, got $http_code)\n"
+        return
+    fi
+
+    if [ -n "$expect_body" ]; then
+        if ! echo "$body" | grep -q "$expect_body"; then
+            echo "FAIL  $label  (missing: $expect_body)"
+            FAILED=$((FAILED + 1))
+            FAILED_LIST="${FAILED_LIST}    $label  (missing: $expect_body)\n"
+            return
+        fi
+    fi
+
+    echo "PASS  $label  ($http_code)"
+    PASSED=$((PASSED + 1))
+    PASSED_LIST="${PASSED_LIST}    $label\n"
+}
 
 test_endpoint() {
     local method="$1"
@@ -107,6 +142,21 @@ test_endpoint "GET"  "/v1/forecast?lat=59.33&lon=18.07"     200 ""
 test_endpoint "GET"  "/v1/cities?query=Stock"               200 ""
 test_endpoint "GET"  "/v1/elpris?price=SE3"                 200 ""
 test_endpoint "GET"  "/nonexistent"                         404 ""
+
+# Minutely and aliased forecast routes
+test_endpoint "GET" "/v1/minutely?lat=59.33&lon=18.07&hours=3"  200 '"success"'
+test_endpoint "GET" "/v1/forecast/minutely?lat=59.33&lon=18.07" 200 ""
+test_endpoint "GET" "/v1/forecast/hourly?lat=59.33&lon=18.07"   200 ""
+
+# /v1/get_plan — validation (deterministic)
+test_endpoint "GET" "/v1/get_plan"                                 400 ""
+test_endpoint "GET" "/v1/get_plan?city=Stockholm"                  400 ""
+test_endpoint "GET" "/v1/get_plan?price=SE3"                       400 ""
+test_endpoint "GET" "/v1/get_plan?city=Stockholm&price=INVALID"    400 ""
+test_endpoint "GET" "/v1/get_plan?city=Nonexistent9999&price=SE3"  400 ""
+
+# /v1/get_plan — happy path (200 if data ready, 202 if newly registered)
+test_endpoint_2xx "GET" "/v1/get_plan?city=Stockholm&price=SE3" ""
 
 echo "========================="
 echo ""

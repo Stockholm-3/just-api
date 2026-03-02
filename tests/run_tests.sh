@@ -29,8 +29,9 @@ SRC_INCLUDES=$(find src -type d | sed 's/^/-I/')
 LIB_INCLUDES=$(find -L lib -type d | sed 's/^/-I/')
 INCLUDES="$SRC_INCLUDES $LIB_INCLUDES -Iincludes"
 
-# Step 3: Collect library object files
+# Step 3: Collect library and source object files
 LIB_OBJS=$(find "$BUILD_DIR/lib" -name '*.o' 2>/dev/null)
+SRC_OBJS=$(find "$BUILD_DIR/src" -name '*.o' ! -path '*/bin/*' 2>/dev/null)
 
 mkdir -p "$BUILD_DIR"
 
@@ -85,9 +86,45 @@ echo ""
 TPE_RESULT=$?
 
 # -----------------------------------------------------------------------
+# compute_config tests
+# -----------------------------------------------------------------------
+echo ""
+echo "Compiling compute_config tests..."
+gcc -O1 -g -Wall -Werror \
+    $INCLUDES \
+    tests/test_compute_config.c \
+    "$BUILD_DIR/src/energy_plan/compute.o" \
+    "$BUILD_DIR/src/logger/logger.o" \
+    $LIB_OBJS \
+    -o "$BUILD_DIR/test_compute_config" \
+    -ljansson -lmbedtls -lmbedx509 -lmbedcrypto -lstdc++ -pthread
+
+echo ""
+"$BUILD_DIR/test_compute_config"
+CC_RESULT=$?
+
+# -----------------------------------------------------------------------
+# fetch_scheduler tests
+# -----------------------------------------------------------------------
+echo ""
+echo "Compiling fetch_scheduler tests..."
+gcc -O1 -g -Wall -Werror \
+    $INCLUDES \
+    tests/test_fetch_scheduler.c \
+    $SRC_OBJS \
+    $LIB_OBJS \
+    -o "$BUILD_DIR/test_fetch_scheduler" \
+    -ljansson -lmbedtls -lmbedx509 -lmbedcrypto -lstdc++ -pthread
+
+echo ""
+"$BUILD_DIR/test_fetch_scheduler"
+FS_RESULT=$?
+
+# -----------------------------------------------------------------------
 # Exit with failure if any suite failed
 # -----------------------------------------------------------------------
-if [ "$FC_RESULT" -ne 0 ] || [ "$TP_RESULT" -ne 0 ] || [ "$TPE_RESULT" -ne 0 ]; then
+if [ "$FC_RESULT" -ne 0 ] || [ "$TP_RESULT" -ne 0 ] || [ "$TPE_RESULT" -ne 0 ] || \
+   [ "$CC_RESULT" -ne 0 ] || [ "$FS_RESULT" -ne 0 ]; then
     exit 1
 fi
 exit 0

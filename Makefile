@@ -73,7 +73,7 @@ $(BUILD_DIR)/%:
 # ------------------------------------------------------------
 # Single binary build
 # ------------------------------------------------------------
-ifeq ($(filter build run,$(MAKECMDGOALS)),build run)
+ifneq ($(filter build run,$(MAKECMDGOALS)),)
 ifndef BIN
 $(error Please specify BIN=<name>. Available: $(BIN_NAMES))
 endif
@@ -133,7 +133,7 @@ SERVER   := $(BUILD_DIR)/server
 COMPUTE  := $(BUILD_DIR)/compute
 
 .PHONY: daemon-start
-daemon-start: $(WATCHDOG) $(SERVER) $(COMPUTE)
+daemon-start: $(WATCHDOG) $(SERVER)
 	@if [ -f /tmp/watchdog.pid ]; then \
 		PID=$$(cat /tmp/watchdog.pid); \
 		if kill -0 $$PID 2>/dev/null; then \
@@ -144,7 +144,6 @@ daemon-start: $(WATCHDOG) $(SERVER) $(COMPUTE)
 	@echo "Starting watchdog..."
 	@$(WATCHDOG) \
 		--server $(SERVER) \
-		--compute $(COMPUTE) \
 		-- $(ARGS)
 
 .PHONY: daemon-stop

@@ -49,9 +49,9 @@ static int run_test(void) {
     }
 
     /* Task 1: throws — should be caught, worker must survive */
-    thread_pool_submit(pool, work_throw, NULL, done_capture, NULL, 0);
+    thread_pool_submit(pool, work_throw, NULL, done_capture, NULL, 0, 0);
     /* Task 2: normal — verifies worker is still alive */
-    thread_pool_submit(pool, work_normal, NULL, NULL, NULL, 0);
+    thread_pool_submit(pool, work_normal, NULL, NULL, NULL, 0, 0);
 
     thread_pool_wait_idle(pool);
     thread_pool_process_completions(pool);
