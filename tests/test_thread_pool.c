@@ -280,8 +280,8 @@ static int test_task_is_cancelled(void) {
     ThreadPool* pool = thread_pool_create(1, 0);
 
     /* Submit a task that polls thread_pool_task_is_cancelled() cooperatively */
-    ThreadPoolTask* task =
-        thread_pool_submit(pool, work_cooperative_cancel, NULL, NULL, NULL, 0, 0);
+    ThreadPoolTask* task = thread_pool_submit(pool, work_cooperative_cancel,
+                                              NULL, NULL, NULL, 0, 0);
     TEST_ASSERT(task != NULL);
 
     /* Wait until work_fn has started, then cancel mid-execution */
@@ -559,7 +559,8 @@ static int test_stats_active_pending_consistent(void) {
 
     /* Queue 3 more tasks while the single worker is blocked */
     for (int i = 0; i < 3; i++) {
-        ThreadPoolTask* t = thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0, 0);
+        ThreadPoolTask* t =
+            thread_pool_submit(pool, NULL, NULL, NULL, NULL, 0, 0);
         TEST_ASSERT(t != NULL);
     }
 
@@ -589,8 +590,8 @@ static int test_work_queue_fifo(void) {
     /* 1 worker guarantees serial execution — FIFO ordering observable */
     ThreadPool* pool = thread_pool_create(1, 0);
     for (int i = 0; i < N; i++) {
-        ThreadPoolTask* t =
-            thread_pool_submit(pool, work_record_order, &ids[i], NULL, NULL, 0, 0);
+        ThreadPoolTask* t = thread_pool_submit(pool, work_record_order, &ids[i],
+                                               NULL, NULL, 0, 0);
         TEST_ASSERT(t != NULL);
     }
     thread_pool_wait_idle(pool);
@@ -621,8 +622,8 @@ static int test_work_queue_drains_on_destroy(void) {
     }
 
     for (int i = 0; i < 3; i++) {
-        ThreadPoolTask* t =
-            thread_pool_submit(pool, work_record_order, &ids[i], NULL, NULL, 0, 0);
+        ThreadPoolTask* t = thread_pool_submit(pool, work_record_order, &ids[i],
+                                               NULL, NULL, 0, 0);
         TEST_ASSERT(t != NULL);
     }
 
@@ -656,15 +657,15 @@ static int test_work_queue_priority(void) {
 
     /* Submit LOW-priority tasks first */
     for (int i = 0; i < 3; i++) {
-        ThreadPoolTask* t =
-            thread_pool_submit(pool, work_record_order, &lo_ids[i], NULL, NULL, 0, -1);
+        ThreadPoolTask* t = thread_pool_submit(pool, work_record_order,
+                                               &lo_ids[i], NULL, NULL, 0, -1);
         TEST_ASSERT(t != NULL);
     }
 
     /* Submit HIGH-priority tasks after — they should run first */
     for (int i = 0; i < 3; i++) {
-        ThreadPoolTask* t =
-            thread_pool_submit(pool, work_record_order, &hi_ids[i], NULL, NULL, 0, 0);
+        ThreadPoolTask* t = thread_pool_submit(pool, work_record_order,
+                                               &hi_ids[i], NULL, NULL, 0, 0);
         TEST_ASSERT(t != NULL);
     }
 
