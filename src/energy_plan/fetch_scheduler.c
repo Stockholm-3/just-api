@@ -1,28 +1,64 @@
 #include "fetch_scheduler.h"
 
-#include "fetcher.h"
-#include "logger.h"
-#include "sys/wait.h"
+#include "energy_plan/energy_plan_store.h"
+#include "logger/logger.h"
 
+#include <http_client.h>
+#include <jansson.h>
 #include <scheduler.h>
-#include <signal.h>
-#include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
+#include <utils.h>
 
-#define FETCH_PORT "10680"
-#define FETCH_TIMEOUT_MS 10000
+#define LOG_MOD "FETCH_SCHED"
 
-// Weather: fetch every hour at 00:02 UTC
-#define WEATHER_INTERVAL_MS (60ULL * 60 * 1000)
-#define WEATHER_OFFSET_MS (60ULL * 2 * 1000)
-#define WEATHER_CACHE_TTL_S (62 * 60) // 2 min margin over the interval
+typedef struct {
+    int   done;
+    int   success;
+    char* body;
+} SyncHttp;
 
-// Elpris: fetch once daily at 13:05 UTC
-#define ELPRIS_SCHEDULE_HOUR 13
-#define ELPRIS_SCHEDULE_MIN 5
-#define ELPRIS_CACHE_TTL_S (65 * 60 * 24) // 5 min margin over the interval
+static void sync_http_cb(const char* event, const char* response, void* ctx) {
+    SyncHttp* h = (SyncHttp*)ctx;
+    h->done     = 1;
+    free(h->body);
+    h->body = NULL;
+
+    if (strcmp(event, "RESPONSE") == 0 && response) {
+        h->body    = strdup(response);
+        h->success = h->body != NULL;
+    } else {
+        h->success = 0;
+    }
+}
+
+/**
+ * Blocking HTTP GET. Returns heap-allocated response body or NULL.
+ * Caller must free().
+ */
+static char* http_get(const char* url, const char* port,
+                      unsigned long timeout_ms) {
+    SyncHttp    h      = {0};
+    HttpClient* client = NULL;
+
+    if (http_client_init(url, &client, port) != 0) {
+        LOG_WARN(LOG_MOD, "http_client_init failed: %s", url);
+        return NULL;
+    }
+    client->callback = sync_http_cb;
+    client->context  = &h;
+    client->timeout  = (uint64_t)timeout_ms;
+    client->state    = HTTP_CLIENT_STATE_INIT;
+
+    while (!h.done) {
+        http_client_work(client, system_monotonic_ms());
+    }
+    http_client_dispose(&client);
+    return h.body;
+}
 
 static void fork_compute(const char* exe) {
     if (!exe) {
@@ -31,123 +67,211 @@ static void fork_compute(const char* exe) {
 
     pid_t pid = fork();
     if (pid < 0) {
-        LOG_ERROR("FETCH_SCHEDULER", "fork() failed for compute step");
+        LOG_WARN(LOG_MOD, "fork() for compute failed");
         return;
     }
-
     if (pid == 0) {
         execl(exe, exe, (char*)NULL);
-        LOG_ERROR("FETCH_SCHEDULER", "execl() failed for: %s", exe);
+        LOG_WARN(LOG_MOD, "execl(%s) failed", exe);
         _exit(1);
     }
 
-    // IGNORE THE CHILD!!!! :):)
-    int   status;
-    pid_t wpid;
-    do {
-        wpid = waitpid(pid, &status, WNOHANG);
-    } while (wpid > 0);
+    int status;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        LOG_WARN(LOG_MOD, "compute exited with code %d", WEXITSTATUS(status));
+    }
+}
+
+static void fetch_weather(const FetchSchedulerConfig* cfg) {
+    LOG_INFO(LOG_MOD, "Fetching weather forecasts…");
+
+    EpCityList cities = energy_plan_store_load_cities();
+    if (!cities.entries || cities.count == 0) {
+        LOG_WARN(LOG_MOD, "No cities in registry, skipping weather fetch");
+        free(cities.entries);
+        return;
+    }
+
+    int ok = 0, fail = 0;
+
+    for (int i = 0; i < cities.count; i++) {
+        EpCityEntry* e = &cities.entries[i];
+
+        char url[512];
+        snprintf(url, sizeof(url), "http://%s:%s%s?lat=%.6f&lon=%.6f",
+                 cfg->service_host, cfg->service_port, cfg->weather_url_path,
+                 e->lat, e->lon);
+
+        LOG_INFO(LOG_MOD, "Fetching weather for %s: %s", e->city, url);
+
+        char* body = http_get(url, cfg->service_port, cfg->timeout_ms);
+        if (!body) {
+            LOG_WARN(LOG_MOD, "HTTP failed for %s", e->city);
+            fail++;
+            continue;
+        }
+
+        json_error_t err;
+        json_t*      root = json_loads(body, 0, &err);
+        free(body);
+
+        if (!root) {
+            LOG_WARN(LOG_MOD, "JSON parse error for %s: %s", e->city, err.text);
+            fail++;
+            continue;
+        }
+
+        if (energy_plan_store_save_weather(e->city, e->lat, e->lon, root) !=
+            0) {
+            LOG_WARN(LOG_MOD, "Failed to save weather for %s", e->city);
+            fail++;
+        } else {
+            ok++;
+        }
+
+        json_decref(root);
+    }
+
+    free(cities.entries);
+    LOG_INFO(LOG_MOD, "Weather fetch done: %d ok, %d failed", ok, fail);
+}
+
+static void fetch_elpris(const FetchSchedulerConfig* cfg) {
+    LOG_INFO(LOG_MOD, "Fetching elpris prices…");
+
+    json_t* merged = json_array();
+    if (!merged) {
+        LOG_WARN(LOG_MOD, "json_array() allocation failed");
+        return;
+    }
+
+    int ok = 0;
+
+    for (int i = 0; i < cfg->price_zones_count; i++) {
+        const char* zone = cfg->price_zones[i];
+
+        char url[256];
+        snprintf(url, sizeof(url), "http://%s:%s%s?price=%s", cfg->service_host,
+                 cfg->service_port, cfg->elpris_url_path, zone);
+
+        LOG_INFO(LOG_MOD, "Fetching elpris for %s: %s", zone, url);
+
+        char* body = http_get(url, cfg->service_port, cfg->timeout_ms);
+        if (!body) {
+            LOG_WARN(LOG_MOD, "HTTP failed for elpris %s", zone);
+            continue;
+        }
+
+        json_error_t err;
+        json_t*      root = json_loads(body, 0, &err);
+        free(body);
+
+        if (!root) {
+            LOG_WARN(LOG_MOD, "JSON parse error for elpris %s: %s", zone,
+                     err.text);
+            continue;
+        }
+
+        if (json_is_array(root)) {
+            size_t  j;
+            json_t* v;
+            json_array_foreach(root, j, v) { json_array_append(merged, v); }
+            ok++;
+        } else if (json_is_object(root)) {
+            json_array_append(merged, root);
+            ok++;
+        } else {
+            LOG_WARN(LOG_MOD, "Unexpected JSON type for elpris %s", zone);
+        }
+
+        json_decref(root);
+    }
+
+    if (ok > 0) {
+        if (energy_plan_store_save_elpris(merged) != 0) {
+            LOG_WARN(LOG_MOD, "Failed to save merged elpris");
+        } else {
+            LOG_INFO(LOG_MOD, "Elpris saved (%d zones merged)", ok);
+        }
+    } else {
+        LOG_WARN(LOG_MOD, "No elpris zones fetched successfully");
+    }
+
+    json_decref(merged);
+}
+
+static const FetchSchedulerConfig* g_cfg = NULL;
+
+static void on_weather_timer(void) {
+    if (!g_cfg) {
+        return;
+    }
+    fetch_weather(g_cfg);
+    fork_compute(g_cfg->compute_exe);
+}
+
+static void on_elpris_timer(void) {
+    if (!g_cfg) {
+        return;
+    }
+    fetch_elpris(g_cfg);
+    fork_compute(g_cfg->compute_exe);
 }
 
 typedef struct {
-    volatile sig_atomic_t* shutdown;
-    const char*            compute_exe;
-} SchedulerContext;
+    volatile sig_atomic_t*      shutdown;
+    const FetchSchedulerConfig* cfg;
+} SchedCtx;
 
-static void fetch_weather(void) {
-    LOG_INFO("FETCH_SCHEDULER", "Fetching weather forecasts for compute...");
+static void* scheduler_thread_fn(void* arg) {
+    SchedCtx* ctx = (SchedCtx*)arg;
+    g_cfg         = ctx->cfg;
 
-    FileCacheConfig cfg = {
-        .cache_dir   = "./cache/compute_input",
-        .ttl_seconds = WEATHER_CACHE_TTL_S,
-        .enabled     = true,
-    };
+    SchedulerTimer* weather_timer =
+        create_aligned_timer_utc(ctx->cfg->weather_interval_ms,
+                                 ctx->cfg->weather_offset_ms, on_weather_timer);
 
-    FileCacheInstance* cache = file_cache_create(&cfg);
-    if (!cache) {
-        LOG_ERROR("FETCH_SCHEDULER", "Failed to create cache for weather");
-        return;
-    }
+    SchedulerTimer* elpris_timer =
+        create_daily_timer(ctx->cfg->elpris_hour_utc,
+                           ctx->cfg->elpris_minute_utc, 0, on_elpris_timer);
 
-    fetch_all_city_forecasts(cache, FETCH_PORT, FETCH_TIMEOUT_MS);
-
-    file_cache_destroy(cache);
-}
-
-static void fetch_elpris(void) {
-    LOG_INFO("FETCH_SCHEDULER", "Fetching elpris for compute...");
-
-    FileCacheConfig cfg = {
-        .cache_dir   = "./cache/compute_input",
-        .ttl_seconds = ELPRIS_CACHE_TTL_S,
-        .enabled     = true,
-    };
-
-    FileCacheInstance* cache = file_cache_create(&cfg);
-    if (!cache) {
-        LOG_ERROR("FETCH_SCHEDULER", "Failed to create cache for elpris");
-        return;
-    }
-
-    fetch_all_price_groups(cache, "elpris", FETCH_PORT, FETCH_TIMEOUT_MS);
-
-    file_cache_destroy(cache);
-}
-
-static const char* g_compute_exe = NULL;
-
-static void scheduled_weather(void) {
-    fetch_weather();
-    fork_compute(g_compute_exe);
-}
-
-static void scheduled_elpris(void) {
-    fetch_elpris();
-    fork_compute(g_compute_exe);
-}
-
-static void* scheduler_thread(void* arg) {
-    SchedulerContext* ctx = arg;
-
-    g_compute_exe = ctx->compute_exe;
-
-    SchedulerTimer* hourly = create_aligned_timer_utc(
-        WEATHER_INTERVAL_MS, WEATHER_OFFSET_MS, scheduled_weather);
-
-    SchedulerTimer* daily = create_daily_timer(
-        ELPRIS_SCHEDULE_HOUR, ELPRIS_SCHEDULE_MIN, 0, scheduled_elpris);
-
-    SchedulerTimer* timers[] = {hourly, daily};
-
+    SchedulerTimer* timers[] = {weather_timer, elpris_timer};
     run_scheduler(timers, 2, ctx->shutdown);
 
-    destroy_timer(hourly);
-    destroy_timer(daily);
+    destroy_timer(weather_timer);
+    destroy_timer(elpris_timer);
 
     free(ctx);
+    g_cfg = NULL;
     return NULL;
 }
 
-int fetch_scheduler_start(pthread_t*                    thread,
-                          const SchedulerServiceConfig* config) {
-    // Fetch on startup so compute has data before the first timer fires
-    fetch_weather();
-    fetch_elpris();
+int fetch_scheduler_start(pthread_t*                  thread,
+                          const FetchSchedulerConfig* config) {
+    if (!thread || !config || !config->shutdown_flag || !config->service_host ||
+        !config->service_port || !config->weather_url_path ||
+        !config->elpris_url_path || !config->price_zones ||
+        config->price_zones_count <= 0) {
+        return -1;
+    }
+
+    // fetch on stratup just beacuse
+    fetch_weather(config);
+    fetch_elpris(config);
     fork_compute(config->compute_exe);
 
-    SchedulerContext* ctx = malloc(sizeof(*ctx));
+    SchedCtx* ctx = malloc(sizeof(*ctx));
     if (!ctx) {
         return -1;
     }
+    ctx->shutdown = config->shutdown_flag;
+    ctx->cfg      = config;
 
-    ctx->shutdown    = config->shutdown_flag;
-    ctx->compute_exe = config->compute_exe;
-
-    if (pthread_create(thread, NULL, scheduler_thread, ctx) != 0) {
+    if (pthread_create(thread, NULL, scheduler_thread_fn, ctx) != 0) {
         free(ctx);
         return -1;
     }
-
     return 0;
 }
 
