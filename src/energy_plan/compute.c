@@ -376,26 +376,6 @@ static int write_output(const CityData* c, const bool decisions[SLOTS_PER_DAY],
     return 0;
 }
 
-static void run_energy_algorithm(const WeatherPoint weather[SLOTS_PER_DAY],
-                                 const PricePoint   prices[SLOTS_PER_DAY],
-                                 bool               decisions[SLOTS_PER_DAY],
-                                 int                weather_count) {
-    (void)weather;
-    (void)weather_count;
-
-    /* TODO: ADD ACTUAL USEFUL ALGORITHM */
-    double sum = 0.0;
-    for (int i = 0; i < SLOTS_PER_DAY; i++) {
-        sum += prices[i].SEK_per_kWh;
-    }
-    double avg = sum / SLOTS_PER_DAY;
-    LOG_DEBUG(LOG_MODULE, "Algo: avg price = %.5f SEK/kWh", avg);
-
-    for (int i = 0; i < SLOTS_PER_DAY; i++) {
-        decisions[i] = prices[i].SEK_per_kWh < avg;
-    }
-}
-
 /* ============= Public API ============= */
 
 void compute_config_set_defaults(ComputeConfig* cfg) {
@@ -478,9 +458,30 @@ int compute_run(const ComputeConfig* cfg) {
             }
             c->weather_count = wcount;
 
-            bool decisions[SLOTS_PER_DAY];
+            /* prepare algorithm input by translating internal data structures
+             */
+            AlgoInput input;
+            memset(&input, 0, sizeof(input));
+            /* copy price & weather info into unified arrays */
+            for (int i = 0; i < wcount && i < SLOTS_PER_DAY; i++) {
+                input.elpris[i]      = c->prices[i].SEK_per_kWh;
+                input.temperature[i] = c->weather[i].temperature;
+                /* WeatherPoint doesn't currently expose sun intensity, so
+                   leave the field at 0.0.  Algorithm treats >0.5 as
+                   'sunny', therefore these slots will be treated as not
+                   sunny by default. */
+                input.sun_intensity[i] = 0.0;
+            }
+            input.slots = wcount;
+
+            AlgoOutput output;
+            bool       decisions[SLOTS_PER_DAY];
             memset(decisions, 0, sizeof(decisions));
-            run_energy_algorithm(c->weather, c->prices, decisions, wcount);
+
+            run_energy_algorithm(&input, &output, decisions);
+
+            /* FIXME: we currently ignore `output` summaries, they may be
+               useful for logging or future features */
 
             if (write_output(c, decisions, cfg->output_dir) != 0) {
                 LOG_ERROR(LOG_MODULE, "Failed to write output for '%s'",
