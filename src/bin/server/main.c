@@ -13,25 +13,16 @@
 #include <string.h>
 #include <sys/resource.h>
 #include <unistd.h>
-
 #define DEFAULT_LOG_DIR "./logs"
 #define DEFAULT_BASE_DIR "."
-
-#define CFG_ENERGY_PLAN_BASE_DIR "energy_plan"
-#define CFG_MAX_CITIES 200
-#define CFG_CITY_TTL_SECONDS (2UL * 24 * 3600)
-
 static volatile sig_atomic_t g_shutdown_requested = 0;
-
-static void handle_shutdown_signal(int signum) {
+static void                  handle_shutdown_signal(int signum) {
     (void)signum;
     g_shutdown_requested = 1;
 }
-
 int main(int argc, char* argv[]) {
-    const char* log_dir  = DEFAULT_LOG_DIR;
-    const char* base_dir = DEFAULT_BASE_DIR;
-
+    const char*          log_dir        = DEFAULT_LOG_DIR;
+    const char*          base_dir       = DEFAULT_BASE_DIR;
     static struct option long_options[] = {
         {"log-dir", required_argument, 0, 'l'},
         {"base-dir", required_argument, 0, 'b'},
@@ -49,22 +40,18 @@ int main(int argc, char* argv[]) {
             break;
         }
     }
-
     if (chdir(base_dir) != 0) {
         fprintf(stderr, "Failed to chdir to base directory: %s\n", base_dir);
         return 1;
     }
-
     if (logger_init(log_dir, LOG_DEBUG) != 0) {
         fprintf(stderr, "Failed to initialize logger\n");
         return 1;
     }
-
     signal(SIGPIPE, SIG_IGN);
     signal(SIGTERM, handle_shutdown_signal);
     signal(SIGINT, handle_shutdown_signal);
     LOG_INFO("MAIN", "Signal handlers configured");
-
     ServerConfig config;
     const char*  config_file = "config.json";
     if (config_parser_load(config_file, &config) != 0) {
@@ -77,19 +64,16 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     config_parser_print(&config);
-
     struct rlimit rlim;
     getrlimit(RLIMIT_NOFILE, &rlim);
     rlim.rlim_cur = config.max_connections;
     setrlimit(RLIMIT_NOFILE, &rlim);
     LOG_INFO("MAIN", "FD limit: %lu", rlim.rlim_cur);
-
     smw_init();
-
     // init energy_plan_store
     EpStoreConfig store_cfg = {
-        .base_dir   = CFG_ENERGY_PLAN_BASE_DIR,
-        .max_cities = CFG_MAX_CITIES,
+        .base_dir   = config.energy_plan.base_dir,
+        .max_cities = config.energy_plan.max_cities,
     };
     if (energy_plan_store_init(&store_cfg) != 0) {
         LOG_ERROR("MAIN", "Failed to initialise energy plan store");
@@ -97,7 +81,6 @@ int main(int argc, char* argv[]) {
         logger_shutdown();
         return 1;
     }
-
     ThreadPool* pool = thread_pool_create(config.thread_pool.num_workers,
                                           config.thread_pool.max_pending);
     if (!pool) {
@@ -109,24 +92,19 @@ int main(int argc, char* argv[]) {
     }
     LOG_INFO("MAIN", "Thread pool created (%d workers, max_pending=%d)",
              config.thread_pool.num_workers, config.thread_pool.max_pending);
-
     smw_create_task(pool, thread_pool_smw_callback);
-
     WeatherServer server;
     weather_server_initiate(&server, pool);
     LOG_INFO("MAIN", "Server started on port 10680 (PID %d)", getpid());
-
     while (!g_shutdown_requested) {
         smw_work(system_monotonic_ms());
     }
-
     LOG_INFO("MAIN", "Shutdown signal received, cleaning up...");
     weather_server_dispose(&server);
     thread_pool_wait_idle(pool);
     thread_pool_process_completions(pool);
     thread_pool_destroy(pool);
     LOG_INFO("MAIN", "Thread pool destroyed");
-
     energy_plan_store_shutdown();
     smw_dispose();
     logger_shutdown();

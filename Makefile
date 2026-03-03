@@ -132,10 +132,12 @@ WATCHDOG := $(BUILD_DIR)/watchdog
 SERVER   := $(BUILD_DIR)/server
 COMPUTE  := $(BUILD_DIR)/compute
 
+WATCHDOG_PID := /tmp/jws-watchdog.pid
+
 .PHONY: daemon-start
 daemon-start: $(WATCHDOG) $(SERVER) $(COMPUTE)
-	@if [ -f /tmp/watchdog.pid ]; then \
-		PID=$$(cat /tmp/watchdog.pid); \
+	@if [ -f $(WATCHDOG_PID) ]; then \
+		PID=$$(cat $(WATCHDOG_PID)); \
 		if kill -0 $$PID 2>/dev/null; then \
 			echo "Watchdog already running (PID $$PID)"; \
 			exit 1; \
@@ -149,10 +151,10 @@ daemon-start: $(WATCHDOG) $(SERVER) $(COMPUTE)
 
 .PHONY: daemon-stop
 daemon-stop:
-	@if [ -f /tmp/watchdog.pid ]; then \
-		PID=$$(cat /tmp/watchdog.pid); \
+	@if [ -f $(WATCHDOG_PID) ]; then \
+		PID=$$(cat $(WATCHDOG_PID)); \
 		kill $$PID 2>/dev/null || true; \
-		rm -f /tmp/watchdog.pid; \
+		rm -f $(WATCHDOG_PID); \
 		echo "Stopped."; \
 	else \
 		echo "Watchdog not running."; \
@@ -160,8 +162,8 @@ daemon-stop:
 
 .PHONY: daemon-status
 daemon-status:
-	@if [ -f /tmp/watchdog.pid ]; then \
-		PID=$$(cat /tmp/watchdog.pid); \
+	@if [ -f $(WATCHDOG_PID) ]; then \
+		PID=$$(cat $(WATCHDOG_PID)); \
 		if kill -0 $$PID 2>/dev/null; then \
 			echo "Watchdog running (PID $$PID)"; \
 		else \

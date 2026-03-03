@@ -1,5 +1,5 @@
 /**
- * @file watchdog.c
+ * @file main.c
  * @brief Watchdog daemon for just-weather-server.
  *
  * Monitors the server process and restarts it on crash with exponential
@@ -14,6 +14,7 @@
 #    define _GNU_SOURCE
 #endif
 
+#include "config/config_parser.h"
 #include "energy_plan/energy_plan_store.h"
 #include "energy_plan/fetch_scheduler.h"
 #include "logger/logger.h"
@@ -40,36 +41,6 @@
 #define CFG_DEFAULT_COMPUTE_PATH "./compute"
 #define CFG_DEFAULT_PID_FILE "/tmp/watchdog.pid"
 #define CFG_DEFAULT_LOG_DIR "./logs"
-#define CFG_ENERGY_PLAN_BASE_DIR "energy_plan"
-
-#define CFG_SERVICE_HOST "127.0.0.1"
-#define CFG_SERVICE_PORT "10680"
-#define CFG_SERVICE_PORT_INT 10680
-#define CFG_HTTP_TIMEOUT_MS 10000UL
-
-#define CFG_WEATHER_URL_PATH "/v1/forecast/minutely"
-#define CFG_ELPRIS_URL_PATH "/v1/elpris"
-
-static const char* const CFG_PRICE_ZONES[] = {"SE1", "SE2", "SE3", "SE4"};
-#define CFG_PRICE_ZONES_COUNT                                                  \
-    (int)(sizeof(CFG_PRICE_ZONES) / sizeof(CFG_PRICE_ZONES[0]))
-
-#define CFG_WEATHER_INTERVAL_MS (60ULL * 60 * 1000) /* 1 hour           */
-#define CFG_WEATHER_OFFSET_MS (60ULL * 2 * 1000)    /* at HH:02:00 UTC  */
-#define CFG_ELPRIS_HOUR_UTC 13                      /* daily at 13:05   */
-#define CFG_ELPRIS_MINUTE_UTC 5
-
-/* City registry */
-#define CFG_MAX_CITIES 200
-#define CFG_CITY_TTL_SECONDS (2UL * 24 * 3600)
-
-/* Watchdog restart policy */
-#define CFG_MAX_RESTARTS 10
-#define CFG_RESTART_WINDOW_SEC 60
-#define CFG_INITIAL_BACKOFF_MS 1000
-#define CFG_MAX_BACKOFF_MS 30000
-#define CFG_SERVER_READY_WAIT_MS 10000
-#define CFG_MONITOR_POLL_US 100000 /* 100 ms */
 
 typedef struct {
     const char* server_path;
@@ -198,16 +169,21 @@ static int monitor_server(void) {
     return 1;
 }
 
+static int g_max_restarts       = 0;
+static int g_restart_window_sec = 0;
+static int g_initial_backoff_ms = 0;
+static int g_max_backoff_ms     = 0;
+
 static int should_restart(void) {
     time_t now = time(NULL);
-    if (now - g_state.last_restart_window_start > CFG_RESTART_WINDOW_SEC) {
+    if (now - g_state.last_restart_window_start > g_restart_window_sec) {
         g_state.restart_count             = 0;
         g_state.last_restart_window_start = now;
-        g_state.current_backoff_ms        = CFG_INITIAL_BACKOFF_MS;
+        g_state.current_backoff_ms        = g_initial_backoff_ms;
     }
-    if (g_state.restart_count >= CFG_MAX_RESTARTS) {
+    if (g_state.restart_count >= g_max_restarts) {
         LOG_WARN("WATCHDOG", "Max restarts (%d) reached in %d seconds",
-                 CFG_MAX_RESTARTS, CFG_RESTART_WINDOW_SEC);
+                 g_max_restarts, g_restart_window_sec);
         return 0;
     }
     return 1;
@@ -216,11 +192,11 @@ static int should_restart(void) {
 static void apply_backoff(void) {
     LOG_INFO("WATCHDOG", "Backoff: %dms (attempt %d/%d)",
              g_state.current_backoff_ms, g_state.restart_count + 1,
-             CFG_MAX_RESTARTS);
+             g_max_restarts);
     usleep((useconds_t)g_state.current_backoff_ms * 1000);
     g_state.current_backoff_ms *= 2;
-    if (g_state.current_backoff_ms > CFG_MAX_BACKOFF_MS) {
-        g_state.current_backoff_ms = CFG_MAX_BACKOFF_MS;
+    if (g_state.current_backoff_ms > g_max_backoff_ms) {
+        g_state.current_backoff_ms = g_max_backoff_ms;
     }
     g_state.restart_count++;
 }
@@ -333,6 +309,12 @@ int main(int argc, char* argv[]) {
     }
     LOG_INFO("WATCHDOG", "Watchdog starting…");
 
+    ServerConfig cfg;
+    if (config_parser_load("config.json", &cfg) != 0) {
+        LOG_WARN("WATCHDOG", "Failed to load config.json, using defaults");
+        config_set_defaults(&cfg);
+    }
+
     if (access(args.server_path, X_OK) != 0) {
         LOG_WARN("WATCHDOG", "Server binary not executable: %s",
                  args.server_path);
@@ -365,9 +347,14 @@ int main(int argc, char* argv[]) {
         args.compute_path = abs_compute;
     }
 
+    g_max_restarts       = cfg.watchdog.max_restarts;
+    g_restart_window_sec = cfg.watchdog.restart_window_sec;
+    g_initial_backoff_ms = cfg.watchdog.initial_backoff_ms;
+    g_max_backoff_ms     = cfg.watchdog.max_backoff_ms;
+
     EpStoreConfig store_cfg = {
-        .base_dir   = CFG_ENERGY_PLAN_BASE_DIR,
-        .max_cities = CFG_MAX_CITIES,
+        .base_dir   = cfg.energy_plan.base_dir,
+        .max_cities = cfg.energy_plan.max_cities,
     };
     if (energy_plan_store_init(&store_cfg) != 0) {
         LOG_WARN("WATCHDOG", "Failed to initialise energy plan store");
@@ -393,7 +380,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (write_pid_file(args.pid_file) < 0) {
+    if (write_pid_file(cfg.watchdog.pid_file) < 0) {
         energy_plan_store_shutdown();
         logger_shutdown();
         return 1;
@@ -404,7 +391,7 @@ int main(int argc, char* argv[]) {
     g_state.server_pid                = -1;
     g_state.restart_count             = 0;
     g_state.last_restart_window_start = time(NULL);
-    g_state.current_backoff_ms        = CFG_INITIAL_BACKOFF_MS;
+    g_state.current_backoff_ms        = cfg.watchdog.initial_backoff_ms;
 
     g_state.server_pid = spawn_server(args.server_path);
     if (g_state.server_pid < 0) {
@@ -413,25 +400,31 @@ int main(int argc, char* argv[]) {
         logger_shutdown();
         return 1;
     }
-    wait_for_server(CFG_SERVICE_HOST, CFG_SERVICE_PORT_INT,
-                    CFG_SERVER_READY_WAIT_MS);
+    wait_for_server(cfg.scheduler.service_host,
+                    atoi(cfg.scheduler.service_port),
+                    cfg.watchdog.server_ready_wait_ms);
 
-    /* Start the fetch scheduler. */
+    const char* price_zone_ptrs[4];
+    for (int i = 0; i < cfg.scheduler.price_zones_count; i++) {
+        price_zone_ptrs[i] = cfg.scheduler.price_zones[i];
+    }
+
+    // Start the fetch scheduler
     pthread_t            sched_thread;
     FetchSchedulerConfig sched_cfg = {
         .shutdown_flag       = &g_shutdown,
         .compute_exe         = args.compute_path,
-        .service_host        = CFG_SERVICE_HOST,
-        .service_port        = CFG_SERVICE_PORT,
-        .weather_url_path    = CFG_WEATHER_URL_PATH,
-        .elpris_url_path     = CFG_ELPRIS_URL_PATH,
-        .price_zones         = CFG_PRICE_ZONES,
-        .price_zones_count   = CFG_PRICE_ZONES_COUNT,
-        .timeout_ms          = CFG_HTTP_TIMEOUT_MS,
-        .weather_interval_ms = CFG_WEATHER_INTERVAL_MS,
-        .weather_offset_ms   = CFG_WEATHER_OFFSET_MS,
-        .elpris_hour_utc     = CFG_ELPRIS_HOUR_UTC,
-        .elpris_minute_utc   = CFG_ELPRIS_MINUTE_UTC,
+        .service_host        = cfg.scheduler.service_host,
+        .service_port        = cfg.scheduler.service_port,
+        .weather_url_path    = cfg.scheduler.weather_url_path,
+        .elpris_url_path     = cfg.scheduler.elpris_url_path,
+        .price_zones         = price_zone_ptrs,
+        .price_zones_count   = cfg.scheduler.price_zones_count,
+        .timeout_ms          = cfg.scheduler.timeout_ms,
+        .weather_interval_ms = cfg.scheduler.weather_interval_ms,
+        .weather_offset_ms   = cfg.scheduler.weather_offset_ms,
+        .elpris_hour_utc     = cfg.scheduler.elpris_hour_utc,
+        .elpris_minute_utc   = cfg.scheduler.elpris_minute_utc,
     };
 
     if (fetch_scheduler_start(&sched_thread, &sched_cfg) != 0) {
@@ -448,8 +441,9 @@ int main(int argc, char* argv[]) {
         if (g_state.server_pid <= 0) {
             g_state.server_pid = spawn_server(args.server_path);
             if (g_state.server_pid > 0) {
-                wait_for_server(CFG_SERVICE_HOST, CFG_SERVICE_PORT_INT,
-                                CFG_SERVER_READY_WAIT_MS);
+                wait_for_server(cfg.scheduler.service_host,
+                                atoi(cfg.scheduler.service_port),
+                                cfg.watchdog.server_ready_wait_ms);
             }
         }
 
@@ -467,7 +461,7 @@ int main(int argc, char* argv[]) {
             break;
         }
 
-        usleep(CFG_MONITOR_POLL_US);
+        usleep(cfg.watchdog.monitor_poll_us);
     }
 
     if (g_state.server_pid > 0) {
@@ -481,7 +475,7 @@ int main(int argc, char* argv[]) {
         LOG_WARN("WATCHDOG", "Scheduler thread join failed");
     }
 
-    remove_pid_file(args.pid_file);
+    remove_pid_file(cfg.watchdog.pid_file);
     energy_plan_store_shutdown();
     LOG_INFO("WATCHDOG", "Watchdog stopped");
     logger_shutdown();

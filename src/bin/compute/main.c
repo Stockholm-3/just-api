@@ -2,18 +2,15 @@
  * @file compute_main.c
  */
 #include "algo.h"
+#include "config/config_parser.h"
 #include "energy_plan/energy_plan_inputs.h"
 #include "energy_plan/energy_plan_store.h"
 #include "logger/logger.h"
 
 #include <jansson.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define LOG_MOD "COMPUTE"
-#define CFG_BASE_DIR "energy_plan"
-#define CFG_LOG_DIR "logs/energy_parser"
-#define CFG_MAX_CITIES 200
 
 static json_t* slot_to_json(int idx, const AlgoInput* in, const AlgoSlot* s) {
     json_t* o = json_object();
@@ -61,17 +58,22 @@ static json_t* build_output(const char* city, const char* zone, double lat,
 }
 
 int main(void) {
-    if (logger_init(CFG_LOG_DIR, LOG_DEBUG) != 0) {
+    ServerConfig cfg;
+    if (config_parser_load("config.json", &cfg) != 0) {
+        config_set_defaults(&cfg);
+    }
+
+    if (logger_init(cfg.compute.log_dir, LOG_DEBUG) != 0) {
         return 1;
     }
 
     LOG_INFO(LOG_MOD, "Compute starting");
 
-    EpStoreConfig cfg = {
-        .base_dir   = CFG_BASE_DIR,
-        .max_cities = CFG_MAX_CITIES,
+    EpStoreConfig store_cfg = {
+        .base_dir   = cfg.energy_plan.base_dir,
+        .max_cities = cfg.energy_plan.max_cities,
     };
-    if (energy_plan_store_init(&cfg) != 0) {
+    if (energy_plan_store_init(&store_cfg) != 0) {
         LOG_WARN(LOG_MOD, "Store init failed");
         logger_shutdown();
         return 1;
