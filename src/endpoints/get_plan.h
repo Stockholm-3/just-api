@@ -16,37 +16,27 @@
 #include <string.h>
 #include <url_query_parser.h>
 
-/* -------------------------------------------------------------------------
- * Allowed price zones
- * ---------------------------------------------------------------------- */
-
 static const char* const ALLOWED_ZONES[] = {"SE1", "SE2", "SE3", "SE4"};
 #define NUM_ALLOWED_ZONES                                                      \
     (int)(sizeof(ALLOWED_ZONES) / sizeof(ALLOWED_ZONES[0]))
 
 static int is_valid_zone(const char* value) {
-    if (!value)
+    if (!value) {
         return 0;
+    }
     for (int i = 0; i < NUM_ALLOWED_ZONES; i++) {
-        if (strcmp(value, ALLOWED_ZONES[i]) == 0)
+        if (strcmp(value, ALLOWED_ZONES[i]) == 0) {
             return 1;
+        }
     }
     return 0;
 }
-
-/* -------------------------------------------------------------------------
- * Per-request context
- * ---------------------------------------------------------------------- */
 
 typedef struct {
     HTTPServerConnection* conn;
     char                  city[256];
     char                  price[16];
 } PlanCtx;
-
-/* -------------------------------------------------------------------------
- * Step 2 of 2 – compute-output read callback
- * ---------------------------------------------------------------------- */
 
 static void on_output_read(void* context, EpOutputStatus status, char* buf,
                            size_t len) {
@@ -83,10 +73,6 @@ static void on_output_read(void* context, EpOutputStatus status, char* buf,
     free(ctx);
 }
 
-/* -------------------------------------------------------------------------
- * Step 1 of 2 – city registration callback
- * ---------------------------------------------------------------------- */
-
 static void on_city_registered(void* context, EpCityRegisterStatus status) {
     (void)status; /* ADDED, EXISTS, and LIMIT_REACHED all proceed to read */
 
@@ -99,10 +85,6 @@ static void on_city_registered(void* context, EpCityRegisterStatus status) {
         free(ctx);
     }
 }
-
-/* -------------------------------------------------------------------------
- * Public entry point
- * ---------------------------------------------------------------------- */
 
 int handle_get_plan(HTTPServerConnection* conn, const char* query) {
     if (!query || *query == '\0') {
@@ -127,7 +109,8 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
                                  "must be SE1, SE2, SE3, or SE4");
     }
 
-    /* Normalise city name: all lower, then capitalise first letter. */
+    // Normalise city name: all lower, then capitalise first letter beacuse why
+    // not.
     char city_norm[256];
     strncpy(city_norm, city, sizeof(city_norm) - 1);
     city_norm[sizeof(city_norm) - 1] = '\0';
@@ -138,7 +121,6 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
         city_norm[0] = (char)toupper((unsigned char)city_norm[0]);
     }
 
-    /* Resolve coordinates. */
     Coordinates coords =
         get_city_coordinates("data/swedish_cities_locations.csv", city_norm);
     if (!coords.found) {
@@ -147,10 +129,10 @@ int handle_get_plan(HTTPServerConnection* conn, const char* query) {
         return send_json_message(conn, 400, err);
     }
 
-    /* Allocate context and start the async chain. */
     PlanCtx* ctx = malloc(sizeof(*ctx));
-    if (!ctx)
+    if (!ctx) {
         return send_json_message(conn, 500, "Internal error");
+    }
 
     ctx->conn = conn;
     strncpy(ctx->city, city_norm, sizeof(ctx->city) - 1);

@@ -35,6 +35,15 @@ typedef struct {
         int num_workers;
         int max_pending;
     } thread_pool;
+
+    /* Compute Configuration */
+    struct {
+        char cities_csv[256];
+        char compute_input_dir[256];
+        char elpris_json[256];
+        char output_dir[256];
+        char lock_file[256];
+    } compute;
 } ServerConfig;
 
 /* Default configuration values */

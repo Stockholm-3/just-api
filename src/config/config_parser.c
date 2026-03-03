@@ -28,6 +28,19 @@ void config_set_defaults(ServerConfig* config) {
     /* Thread pool defaults */
     config->thread_pool.num_workers = 4;
     config->thread_pool.max_pending = 256;
+
+    /* Compute defaults */
+    strncpy(config->compute.cities_csv, "energy_plan/cities.csv",
+            sizeof(config->compute.cities_csv) - 1);
+    strncpy(config->compute.compute_input_dir, "cache/compute_input",
+            sizeof(config->compute.compute_input_dir) - 1);
+    strncpy(config->compute.elpris_json,
+            "cache/compute_input/elpris_merged.json",
+            sizeof(config->compute.elpris_json) - 1);
+    strncpy(config->compute.output_dir, "energy_plan/compute_output",
+            sizeof(config->compute.output_dir) - 1);
+    strncpy(config->compute.lock_file, "energy_plan/compute_output/.lock",
+            sizeof(config->compute.lock_file) - 1);
 }
 
 int config_parser_load(const char* filepath, ServerConfig* config) {
@@ -143,6 +156,32 @@ int config_parser_load(const char* filepath, ServerConfig* config) {
         }
     }
 
+    /* Parse compute section */
+    json_t* compute = json_object_get(root, "compute");
+    if (compute) {
+        json_t* v;
+        v = json_object_get(compute, "cities_csv");
+        if (v && json_is_string(v))
+            strncpy(config->compute.cities_csv, json_string_value(v),
+                    sizeof(config->compute.cities_csv) - 1);
+        v = json_object_get(compute, "compute_input_dir");
+        if (v && json_is_string(v))
+            strncpy(config->compute.compute_input_dir, json_string_value(v),
+                    sizeof(config->compute.compute_input_dir) - 1);
+        v = json_object_get(compute, "elpris_json");
+        if (v && json_is_string(v))
+            strncpy(config->compute.elpris_json, json_string_value(v),
+                    sizeof(config->compute.elpris_json) - 1);
+        v = json_object_get(compute, "output_dir");
+        if (v && json_is_string(v))
+            strncpy(config->compute.output_dir, json_string_value(v),
+                    sizeof(config->compute.output_dir) - 1);
+        v = json_object_get(compute, "lock_file");
+        if (v && json_is_string(v))
+            strncpy(config->compute.lock_file, json_string_value(v),
+                    sizeof(config->compute.lock_file) - 1);
+    }
+
     json_decref(root);
     printf("[CONFIG] Configuration loaded from %s\n", filepath);
     return 0;
@@ -199,5 +238,12 @@ void config_parser_print(const ServerConfig* config) {
     printf("  Workers: %d\n", config->thread_pool.num_workers);
     printf("  Max Pending: %d%s\n", config->thread_pool.max_pending,
            config->thread_pool.max_pending == 0 ? " (unlimited)" : "");
+
+    printf("\nCompute:\n");
+    printf("  Cities CSV: %s\n", config->compute.cities_csv);
+    printf("  Input Dir:  %s\n", config->compute.compute_input_dir);
+    printf("  Elpris JSON: %s\n", config->compute.elpris_json);
+    printf("  Output Dir: %s\n", config->compute.output_dir);
+    printf("  Lock File:  %s\n", config->compute.lock_file);
     printf("===========================\n\n");
 }

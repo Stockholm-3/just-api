@@ -858,14 +858,16 @@ static void minutely_http_callback(const char* event, const char* response,
 
 static char* build_minutely_url(float lat, float lon, int steps) {
     char* url = malloc(1024);
-    if (!url)
+    if (!url) {
         return NULL;
+    }
 
     snprintf(url, 1024,
              "%s?latitude=%.6f&longitude=%.6f"
              "&minutely_15=temperature_2m,relative_humidity_2m,precipitation,"
              "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
-             "is_day&forecast_minutely_15=%d&timezone=Europe%%2FBerlin",
+             "is_day,direct_radiation"
+             "&forecast_minutely_15=%d&timezone=Europe%%2FBerlin",
              HOURLY_API_BASE_URL, lat, lon, steps);
     return url;
 }
@@ -874,8 +876,9 @@ static char* build_minutely_response_json(const char* api_response, float lat,
                                           float lon) {
     json_error_t error;
     json_t* root = json_loadb(api_response, strlen(api_response), 0, &error);
-    if (!root)
+    if (!root) {
         return NULL;
+    }
 
     json_t* minutely       = json_object_get(root, "minutely_15");
     json_t* minutely_units = json_object_get(root, "minutely_15_units");
@@ -891,32 +894,38 @@ static char* build_minutely_response_json(const char* api_response, float lat,
         return NULL;
     }
 
-    /* Get units */
     const char* temp_unit =
         json_string_value(json_object_get(minutely_units, "temperature_2m"));
     const char* wind_unit =
         json_string_value(json_object_get(minutely_units, "wind_speed_10m"));
-    if (!temp_unit)
+    if (!temp_unit) {
         temp_unit = "°C";
-    if (!wind_unit)
+    }
+    if (!wind_unit) {
         wind_unit = "km/h";
+    }
 
-    /* Get arrays */
-    json_t* temps    = json_object_get(minutely, "temperature_2m");
-    json_t* humidity = json_object_get(minutely, "relative_humidity_2m");
-    json_t* precip   = json_object_get(minutely, "precipitation");
-    json_t* codes    = json_object_get(minutely, "weather_code");
-    json_t* pressure = json_object_get(minutely, "surface_pressure");
-    json_t* winds    = json_object_get(minutely, "wind_speed_10m");
-    json_t* winddir  = json_object_get(minutely, "wind_direction_10m");
-    json_t* isday    = json_object_get(minutely, "is_day");
+    json_t* temps     = json_object_get(minutely, "temperature_2m");
+    json_t* humidity  = json_object_get(minutely, "relative_humidity_2m");
+    json_t* precip    = json_object_get(minutely, "precipitation");
+    json_t* codes     = json_object_get(minutely, "weather_code");
+    json_t* pressure  = json_object_get(minutely, "surface_pressure");
+    json_t* winds     = json_object_get(minutely, "wind_speed_10m");
+    json_t* winddir   = json_object_get(minutely, "wind_direction_10m");
+    json_t* isday     = json_object_get(minutely, "is_day");
+    json_t* radiation = json_object_get(minutely, "direct_radiation");
 
-    /* Build response */
     json_t* data         = json_object();
     json_t* location_obj = json_object();
     json_object_set_new(location_obj, "latitude", json_real(lat));
     json_object_set_new(location_obj, "longitude", json_real(lon));
     json_object_set_new(data, "location", location_obj);
+
+/*
+ * Normalise direct_radiation (W/m²) to a 0..1 sun_intensity value.
+ * 1000 W/m² is the standard peak solar irradiance at sea level.
+ */
+#define SOLAR_PEAK_W_M2 1000.0
 
     json_t* minutely_array = json_array();
     for (size_t i = 0; i < count; i++) {
@@ -963,16 +972,28 @@ static char* build_minutely_response_json(const char* api_response, float lat,
             point, "is_day",
             json_integer(json_integer_value(json_array_get(isday, i))));
 
+        /* direct_radiation in W/m², also exposed as normalised sun_intensity */
+        double raw_radiation =
+            radiation ? json_real_value(json_array_get(radiation, i)) : 0.0;
+        double sun_intensity = raw_radiation / SOLAR_PEAK_W_M2;
+        if (sun_intensity > 1.0) {
+            sun_intensity = 1.0;
+        }
+        if (sun_intensity < 0.0) {
+            sun_intensity = 0.0;
+        }
+
+        json_object_set_new(point, "direct_radiation_wm2",
+                            json_real(raw_radiation));
+        json_object_set_new(point, "sun_intensity", json_real(sun_intensity));
+
         json_array_append_new(minutely_array, point);
     }
     json_object_set_new(data, "minutely_forecast", minutely_array);
 
     json_decref(root);
-
-    char* result = response_builder_success(data);
-    return result;
+    return response_builder_success(data);
 }
-
 static void minutely_http_callback(const char* event, const char* response,
                                    void* context) {
     AsyncMinutelyContext* ctx = (AsyncMinutelyContext*)context;

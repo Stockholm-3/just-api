@@ -366,9 +366,8 @@ int main(int argc, char* argv[]) {
     }
 
     EpStoreConfig store_cfg = {
-        .base_dir         = CFG_ENERGY_PLAN_BASE_DIR,
-        .max_cities       = CFG_MAX_CITIES,
-        .city_ttl_seconds = CFG_CITY_TTL_SECONDS,
+        .base_dir   = CFG_ENERGY_PLAN_BASE_DIR,
+        .max_cities = CFG_MAX_CITIES,
     };
     if (energy_plan_store_init(&store_cfg) != 0) {
         LOG_WARN("WATCHDOG", "Failed to initialise energy plan store");

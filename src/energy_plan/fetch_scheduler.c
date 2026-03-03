@@ -35,10 +35,6 @@ static void sync_http_cb(const char* event, const char* response, void* ctx) {
     }
 }
 
-/**
- * Blocking HTTP GET. Returns heap-allocated response body or NULL.
- * Caller must free().
- */
 static char* http_get(const char* url, const char* port,
                       unsigned long timeout_ms) {
     SyncHttp    h      = {0};
@@ -56,6 +52,7 @@ static char* http_get(const char* url, const char* port,
     while (!h.done) {
         http_client_work(client, system_monotonic_ms());
     }
+
     http_client_dispose(&client);
     return h.body;
 }
@@ -67,7 +64,7 @@ static void fork_compute(const char* exe) {
 
     pid_t pid = fork();
     if (pid < 0) {
-        LOG_WARN(LOG_MOD, "fork() for compute failed");
+        LOG_WARN(LOG_MOD, "fork() failed");
         return;
     }
     if (pid == 0) {
@@ -98,16 +95,17 @@ static void fetch_weather(const FetchSchedulerConfig* cfg) {
     for (int i = 0; i < cities.count; i++) {
         EpCityEntry* e = &cities.entries[i];
 
+        /* CsvRow fields: key=city  tag=price_zone  f1=lat  f2=lon */
         char url[512];
         snprintf(url, sizeof(url), "http://%s:%s%s?lat=%.6f&lon=%.6f",
                  cfg->service_host, cfg->service_port, cfg->weather_url_path,
-                 e->lat, e->lon);
+                 e->f1, e->f2);
 
-        LOG_INFO(LOG_MOD, "Fetching weather for %s: %s", e->city, url);
+        LOG_INFO(LOG_MOD, "Fetching weather for %s: %s", e->key, url);
 
         char* body = http_get(url, cfg->service_port, cfg->timeout_ms);
         if (!body) {
-            LOG_WARN(LOG_MOD, "HTTP failed for %s", e->city);
+            LOG_WARN(LOG_MOD, "HTTP failed for %s", e->key);
             fail++;
             continue;
         }
@@ -117,14 +115,13 @@ static void fetch_weather(const FetchSchedulerConfig* cfg) {
         free(body);
 
         if (!root) {
-            LOG_WARN(LOG_MOD, "JSON parse error for %s: %s", e->city, err.text);
+            LOG_WARN(LOG_MOD, "JSON parse error for %s: %s", e->key, err.text);
             fail++;
             continue;
         }
 
-        if (energy_plan_store_save_weather(e->city, e->lat, e->lon, root) !=
-            0) {
-            LOG_WARN(LOG_MOD, "Failed to save weather for %s", e->city);
+        if (energy_plan_store_save_weather(e->key, e->f1, e->f2, root) != 0) {
+            LOG_WARN(LOG_MOD, "Failed to save weather for %s", e->key);
             fail++;
         } else {
             ok++;
@@ -176,7 +173,7 @@ static void fetch_elpris(const FetchSchedulerConfig* cfg) {
         if (json_is_array(root)) {
             size_t  j;
             json_t* v;
-            json_array_foreach(root, j, v) { json_array_append(merged, v); }
+            json_array_foreach(root, j, v) json_array_append(merged, v);
             ok++;
         } else if (json_is_object(root)) {
             json_array_append(merged, root);
@@ -256,7 +253,7 @@ int fetch_scheduler_start(pthread_t*                  thread,
         return -1;
     }
 
-    // fetch on stratup just beacuse
+    // fetch on startup so that data is avalaiube right away
     fetch_weather(config);
     fetch_elpris(config);
     fork_compute(config->compute_exe);

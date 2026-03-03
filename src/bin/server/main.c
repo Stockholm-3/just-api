@@ -88,9 +88,8 @@ int main(int argc, char* argv[]) {
 
     // init energy_plan_store
     EpStoreConfig store_cfg = {
-        .base_dir         = CFG_ENERGY_PLAN_BASE_DIR,
-        .max_cities       = CFG_MAX_CITIES,
-        .city_ttl_seconds = CFG_CITY_TTL_SECONDS,
+        .base_dir   = CFG_ENERGY_PLAN_BASE_DIR,
+        .max_cities = CFG_MAX_CITIES,
     };
     if (energy_plan_store_init(&store_cfg) != 0) {
         LOG_ERROR("MAIN", "Failed to initialise energy plan store");
@@ -114,7 +113,7 @@ int main(int argc, char* argv[]) {
     smw_create_task(pool, thread_pool_smw_callback);
 
     WeatherServer server;
-    weather_server_initiate(&server);
+    weather_server_initiate(&server, pool);
     LOG_INFO("MAIN", "Server started on port 10680 (PID %d)", getpid());
 
     while (!g_shutdown_requested) {

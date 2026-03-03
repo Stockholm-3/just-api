@@ -93,4 +93,4 @@ int fetch_scheduler_start(pthread_t*                  thread,
  */
 int fetch_scheduler_stop(pthread_t thread);
 
-#endif /* FETCH_SCHEDULER_H */
+#endif // FETCH_SCHEDULER_H
