@@ -49,17 +49,17 @@ typedef struct {
 
     /* Fetch scheduler */
     struct {
-        char   service_host[64];
-        char   service_port[8];
-        char   weather_url_path[128];
-        char   elpris_url_path[128];
-        char   price_zones[4][8]; /* up to 4 zones, e.g. "SE1" */
-        int    price_zones_count;
-        long   timeout_ms;
-        long   weather_interval_ms;
-        long   weather_offset_ms;
-        int    elpris_hour_utc;
-        int    elpris_minute_utc;
+        char service_host[64];
+        char service_port[8];
+        char weather_url_path[128];
+        char elpris_url_path[128];
+        char price_zones[4][8]; /* up to 4 zones, e.g. "SE1" */
+        int  price_zones_count;
+        long timeout_ms;
+        long weather_interval_ms;
+        long weather_offset_ms;
+        int  elpris_hour_utc;
+        int  elpris_minute_utc;
     } scheduler;
 
     /* Compute */

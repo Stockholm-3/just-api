@@ -22,19 +22,19 @@ void config_set_defaults(ServerConfig* cfg) {
 
     strncpy(cfg->watchdog.pid_file, "tmp/jws-watchdog.pid",
             sizeof(cfg->watchdog.pid_file) - 1);
-    cfg->watchdog.max_restarts        = 10;
-    cfg->watchdog.restart_window_sec  = 60;
-    cfg->watchdog.initial_backoff_ms  = 1000;
-    cfg->watchdog.max_backoff_ms      = 30000;
+    cfg->watchdog.max_restarts         = 10;
+    cfg->watchdog.restart_window_sec   = 60;
+    cfg->watchdog.initial_backoff_ms   = 1000;
+    cfg->watchdog.max_backoff_ms       = 30000;
     cfg->watchdog.server_ready_wait_ms = 10000;
-    cfg->watchdog.monitor_poll_us     = 100000; //100 ms
+    cfg->watchdog.monitor_poll_us      = 100000; // 100 ms
 
     cfg->thread_pool.num_workers = 4;
     cfg->thread_pool.max_pending = 256;
 
     strncpy(cfg->energy_plan.base_dir, "energy_plan",
             sizeof(cfg->energy_plan.base_dir) - 1);
-    cfg->energy_plan.max_cities      = 200;
+    cfg->energy_plan.max_cities       = 200;
     cfg->energy_plan.city_ttl_seconds = 2L * 24 * 3600;
 
     strncpy(cfg->scheduler.service_host, "127.0.0.1",
@@ -52,7 +52,7 @@ void config_set_defaults(ServerConfig* cfg) {
     strncpy(cfg->scheduler.price_zones[3], "SE4", 7);
     cfg->scheduler.timeout_ms          = 10000;
     cfg->scheduler.weather_interval_ms = 60ULL * 60 * 1000; // 1 hour
-    cfg->scheduler.weather_offset_ms   = 60ULL * 2  * 1000; // HH:02:00
+    cfg->scheduler.weather_offset_ms   = 60ULL * 2 * 1000;  // HH:02:00
     cfg->scheduler.elpris_hour_utc     = 13;
     cfg->scheduler.elpris_minute_utc   = 5;
 
@@ -76,32 +76,33 @@ void config_set_defaults(ServerConfig* cfg) {
     strncpy(cfg->paths.log_dir, "./logs", sizeof(cfg->paths.log_dir) - 1);
 }
 
-#define STR_SET(dst, jval)                                             \
-    do {                                                               \
-        if ((jval) && json_is_string(jval))                           \
-            strncpy((dst), json_string_value(jval), sizeof(dst) - 1); \
+#define STR_SET(dst, jval)                                                     \
+    do {                                                                       \
+        if ((jval) && json_is_string(jval))                                    \
+            strncpy((dst), json_string_value(jval), sizeof(dst) - 1);          \
     } while (0)
 
-#define INT_SET(dst, jval)                              \
-    do {                                                \
-        if ((jval) && json_is_integer(jval))            \
-            (dst) = (int)json_integer_value(jval);      \
+#define INT_SET(dst, jval)                                                     \
+    do {                                                                       \
+        if ((jval) && json_is_integer(jval))                                   \
+            (dst) = (int)json_integer_value(jval);                             \
     } while (0)
 
-#define LONG_SET(dst, jval)                             \
-    do {                                                \
-        if ((jval) && json_is_integer(jval))            \
-            (dst) = (long)json_integer_value(jval);     \
+#define LONG_SET(dst, jval)                                                    \
+    do {                                                                       \
+        if ((jval) && json_is_integer(jval))                                   \
+            (dst) = (long)json_integer_value(jval);                            \
     } while (0)
 
-#define BOOL_SET(dst, jval)                             \
-    do {                                                \
-        if ((jval) && json_is_boolean(jval))            \
-            (dst) = json_boolean_value(jval);           \
+#define BOOL_SET(dst, jval)                                                    \
+    do {                                                                       \
+        if ((jval) && json_is_boolean(jval))                                   \
+            (dst) = json_boolean_value(jval);                                  \
     } while (0)
 
 int config_parser_load(const char* filepath, ServerConfig* cfg) {
-    if (!filepath || !cfg) return -1;
+    if (!filepath || !cfg)
+        return -1;
 
     config_set_defaults(cfg);
 
@@ -114,91 +115,112 @@ int config_parser_load(const char* filepath, ServerConfig* cfg) {
 
     json_t* s = json_object_get(root, "server");
     if (s) {
-        INT_SET(cfg->server_port,     json_object_get(s, "port"));
+        INT_SET(cfg->server_port, json_object_get(s, "port"));
         INT_SET(cfg->max_connections, json_object_get(s, "max_connections"));
-        BOOL_SET(cfg->daemon_mode,    json_object_get(s, "daemon_mode"));
+        BOOL_SET(cfg->daemon_mode, json_object_get(s, "daemon_mode"));
     }
 
     json_t* c = json_object_get(root, "cache");
     if (c) {
-        STR_SET(cfg->cache.cache_dir,          json_object_get(c, "directory"));
-        INT_SET(cfg->cache.weather_ttl_seconds, json_object_get(c, "weather_ttl_seconds"));
-        INT_SET(cfg->cache.geo_ttl_seconds,     json_object_get(c, "geo_ttl_seconds"));
-        BOOL_SET(cfg->cache.enabled,            json_object_get(c, "enabled"));
+        STR_SET(cfg->cache.cache_dir, json_object_get(c, "directory"));
+        INT_SET(cfg->cache.weather_ttl_seconds,
+                json_object_get(c, "weather_ttl_seconds"));
+        INT_SET(cfg->cache.geo_ttl_seconds,
+                json_object_get(c, "geo_ttl_seconds"));
+        BOOL_SET(cfg->cache.enabled, json_object_get(c, "enabled"));
     }
 
     json_t* g = json_object_get(root, "geocoding");
     if (g) {
         INT_SET(cfg->geocoding.max_results, json_object_get(g, "max_results"));
-        STR_SET(cfg->geocoding.language,    json_object_get(g, "language"));
+        STR_SET(cfg->geocoding.language, json_object_get(g, "language"));
     }
 
     /* --- watchdog --- */
     json_t* w = json_object_get(root, "watchdog");
     if (w) {
-        STR_SET(cfg->watchdog.pid_file,            json_object_get(w, "pid_file"));
-        INT_SET(cfg->watchdog.max_restarts,         json_object_get(w, "max_restarts"));
-        INT_SET(cfg->watchdog.restart_window_sec,   json_object_get(w, "restart_window_sec"));
-        INT_SET(cfg->watchdog.initial_backoff_ms,   json_object_get(w, "initial_backoff_ms"));
-        INT_SET(cfg->watchdog.max_backoff_ms,       json_object_get(w, "max_backoff_ms"));
-        INT_SET(cfg->watchdog.server_ready_wait_ms, json_object_get(w, "server_ready_wait_ms"));
-        INT_SET(cfg->watchdog.monitor_poll_us,      json_object_get(w, "monitor_poll_us"));
+        STR_SET(cfg->watchdog.pid_file, json_object_get(w, "pid_file"));
+        INT_SET(cfg->watchdog.max_restarts, json_object_get(w, "max_restarts"));
+        INT_SET(cfg->watchdog.restart_window_sec,
+                json_object_get(w, "restart_window_sec"));
+        INT_SET(cfg->watchdog.initial_backoff_ms,
+                json_object_get(w, "initial_backoff_ms"));
+        INT_SET(cfg->watchdog.max_backoff_ms,
+                json_object_get(w, "max_backoff_ms"));
+        INT_SET(cfg->watchdog.server_ready_wait_ms,
+                json_object_get(w, "server_ready_wait_ms"));
+        INT_SET(cfg->watchdog.monitor_poll_us,
+                json_object_get(w, "monitor_poll_us"));
     }
 
     json_t* tp = json_object_get(root, "thread_pool");
     if (tp) {
-        INT_SET(cfg->thread_pool.num_workers, json_object_get(tp, "num_workers"));
-        INT_SET(cfg->thread_pool.max_pending, json_object_get(tp, "max_pending"));
+        INT_SET(cfg->thread_pool.num_workers,
+                json_object_get(tp, "num_workers"));
+        INT_SET(cfg->thread_pool.max_pending,
+                json_object_get(tp, "max_pending"));
     }
 
     json_t* ep = json_object_get(root, "energy_plan");
     if (ep) {
-        STR_SET(cfg->energy_plan.base_dir,        json_object_get(ep, "base_dir"));
-        INT_SET(cfg->energy_plan.max_cities,       json_object_get(ep, "max_cities"));
-        LONG_SET(cfg->energy_plan.city_ttl_seconds, json_object_get(ep, "city_ttl_seconds"));
+        STR_SET(cfg->energy_plan.base_dir, json_object_get(ep, "base_dir"));
+        INT_SET(cfg->energy_plan.max_cities, json_object_get(ep, "max_cities"));
+        LONG_SET(cfg->energy_plan.city_ttl_seconds,
+                 json_object_get(ep, "city_ttl_seconds"));
     }
 
     json_t* sc = json_object_get(root, "scheduler");
     if (sc) {
-        STR_SET(cfg->scheduler.service_host,      json_object_get(sc, "service_host"));
-        STR_SET(cfg->scheduler.service_port,      json_object_get(sc, "service_port"));
-        STR_SET(cfg->scheduler.weather_url_path,  json_object_get(sc, "weather_url_path"));
-        STR_SET(cfg->scheduler.elpris_url_path,   json_object_get(sc, "elpris_url_path"));
-        LONG_SET(cfg->scheduler.timeout_ms,           json_object_get(sc, "timeout_ms"));
-        LONG_SET(cfg->scheduler.weather_interval_ms,  json_object_get(sc, "weather_interval_ms"));
-        LONG_SET(cfg->scheduler.weather_offset_ms,    json_object_get(sc, "weather_offset_ms"));
-        INT_SET(cfg->scheduler.elpris_hour_utc,   json_object_get(sc, "elpris_hour_utc"));
-        INT_SET(cfg->scheduler.elpris_minute_utc, json_object_get(sc, "elpris_minute_utc"));
+        STR_SET(cfg->scheduler.service_host,
+                json_object_get(sc, "service_host"));
+        STR_SET(cfg->scheduler.service_port,
+                json_object_get(sc, "service_port"));
+        STR_SET(cfg->scheduler.weather_url_path,
+                json_object_get(sc, "weather_url_path"));
+        STR_SET(cfg->scheduler.elpris_url_path,
+                json_object_get(sc, "elpris_url_path"));
+        LONG_SET(cfg->scheduler.timeout_ms, json_object_get(sc, "timeout_ms"));
+        LONG_SET(cfg->scheduler.weather_interval_ms,
+                 json_object_get(sc, "weather_interval_ms"));
+        LONG_SET(cfg->scheduler.weather_offset_ms,
+                 json_object_get(sc, "weather_offset_ms"));
+        INT_SET(cfg->scheduler.elpris_hour_utc,
+                json_object_get(sc, "elpris_hour_utc"));
+        INT_SET(cfg->scheduler.elpris_minute_utc,
+                json_object_get(sc, "elpris_minute_utc"));
 
         json_t* zones = json_object_get(sc, "price_zones");
         if (zones && json_is_array(zones)) {
             int n = (int)json_array_size(zones);
-            if (n > 4) n = 4;
+            if (n > 4)
+                n = 4;
             cfg->scheduler.price_zones_count = n;
             for (int i = 0; i < n; i++) {
                 json_t* z = json_array_get(zones, i);
                 if (z && json_is_string(z))
-                    strncpy(cfg->scheduler.price_zones[i],
-                            json_string_value(z), 7);
+                    strncpy(cfg->scheduler.price_zones[i], json_string_value(z),
+                            7);
             }
         }
     }
 
     json_t* co = json_object_get(root, "compute");
     if (co) {
-        STR_SET(cfg->compute.cities_csv,        json_object_get(co, "cities_csv"));
-        STR_SET(cfg->compute.compute_input_dir, json_object_get(co, "compute_input_dir"));
-        STR_SET(cfg->compute.elpris_json,       json_object_get(co, "elpris_json"));
-        STR_SET(cfg->compute.output_dir,        json_object_get(co, "output_dir"));
-        STR_SET(cfg->compute.lock_file,         json_object_get(co, "lock_file"));
-        STR_SET(cfg->compute.log_dir,           json_object_get(co, "log_dir"));
+        STR_SET(cfg->compute.cities_csv, json_object_get(co, "cities_csv"));
+        STR_SET(cfg->compute.compute_input_dir,
+                json_object_get(co, "compute_input_dir"));
+        STR_SET(cfg->compute.elpris_json, json_object_get(co, "elpris_json"));
+        STR_SET(cfg->compute.output_dir, json_object_get(co, "output_dir"));
+        STR_SET(cfg->compute.lock_file, json_object_get(co, "lock_file"));
+        STR_SET(cfg->compute.log_dir, json_object_get(co, "log_dir"));
     }
 
     json_t* pa = json_object_get(root, "paths");
     if (pa) {
-        STR_SET(cfg->paths.server_binary,  json_object_get(pa, "server_binary"));
-        STR_SET(cfg->paths.compute_binary, json_object_get(pa, "compute_binary"));
-        STR_SET(cfg->paths.log_dir,        json_object_get(pa, "log_dir"));
+        STR_SET(cfg->paths.server_binary, json_object_get(pa, "server_binary"));
+        STR_SET(cfg->paths.compute_binary,
+                json_object_get(pa, "compute_binary"));
+        STR_SET(cfg->paths.log_dir, json_object_get(pa, "log_dir"));
     }
 
     json_decref(root);
@@ -207,7 +229,8 @@ int config_parser_load(const char* filepath, ServerConfig* cfg) {
 }
 
 int config_parser_validate(const ServerConfig* cfg) {
-    if (!cfg) return -1;
+    if (!cfg)
+        return -1;
 
     if (cfg->server_port <= 0 || cfg->server_port > 65535) {
         fprintf(stderr, "[CONFIG] Invalid server port: %d\n", cfg->server_port);
