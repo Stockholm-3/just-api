@@ -47,9 +47,9 @@ you can stop the daemon with:
 make daemon-stop
 ```
 
-## API DOCS
+## API Docs
 
-see [docs/api/api_docs.md](api_docs.md) for API documentation
+see [api_docs.md](docs/api/api_docs.md) for API documentation
 
 ## Authors
 
