@@ -11,10 +11,14 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/epoll.h>
 #include <sys/resource.h>
 #include <unistd.h>
+
 #define DEFAULT_LOG_DIR "./logs"
 #define DEFAULT_BASE_DIR "."
+#define EPOLL_TIMEOUT_MS 10
+#define EPOLL_MAX_EVENTS 1
 static volatile sig_atomic_t g_shutdown_requested = 0;
 static void                  handle_shutdown_signal(int signum) {
     (void)signum;
@@ -96,9 +100,30 @@ int main(int argc, char* argv[]) {
     WeatherServer server;
     weather_server_initiate(&server, pool);
     LOG_INFO("MAIN", "Server started on port 10680 (PID %d)", getpid());
+
+    int epfd = epoll_create1(EPOLL_CLOEXEC);
+    if (epfd < 0) {
+        LOG_ERROR("MAIN", "epoll_create1 failed");
+        weather_server_dispose(&server);
+        thread_pool_destroy(pool);
+        energy_plan_store_shutdown();
+        smw_dispose();
+        logger_shutdown();
+        return 1;
+    }
+
+    struct epoll_event ev = {0};
+    ev.events             = EPOLLIN;
+    ev.data.fd            = server.httpServer.tcpServer.listen_fd;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, server.httpServer.tcpServer.listen_fd, &ev);
+
+    struct epoll_event events[EPOLL_MAX_EVENTS];
     while (!g_shutdown_requested) {
+        epoll_wait(epfd, events, EPOLL_MAX_EVENTS, EPOLL_TIMEOUT_MS);
         smw_work(system_monotonic_ms());
     }
+
+    close(epfd);
     LOG_INFO("MAIN", "Shutdown signal received, cleaning up...");
     weather_server_dispose(&server);
     thread_pool_wait_idle(pool);
