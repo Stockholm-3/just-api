@@ -147,7 +147,6 @@ static pid_t spawn_server(const char* server_path) {
         _exit(127);
     }
 
-    // Ensure group is set even if child ran fast
     setpgid(pid, pid);
 
     LOG_INFO("WATCHDOG", "Server spawned: PID %d", pid);
@@ -409,8 +408,7 @@ int main(int argc, char* argv[]) {
         logger_shutdown();
         return 1;
     }
-    wait_for_server(cfg.scheduler.service_host,
-                    atoi(cfg.scheduler.service_port),
+    wait_for_server(cfg.scheduler.service_host, cfg.server_port,
                     cfg.watchdog.server_ready_wait_ms);
 
     const char* price_zone_ptrs[4];
@@ -418,13 +416,15 @@ int main(int argc, char* argv[]) {
         price_zone_ptrs[i] = cfg.scheduler.price_zones[i];
     }
 
+    char port_str[9];
+    snprintf(port_str, sizeof(port_str), "%d", cfg.server_port);
     // Start the fetch scheduler
     pthread_t            sched_thread;
     FetchSchedulerConfig sched_cfg = {
         .shutdown_flag       = &g_shutdown,
         .compute_exe         = args.compute_path,
         .service_host        = cfg.scheduler.service_host,
-        .service_port        = cfg.scheduler.service_port,
+        .service_port        = port_str,
         .weather_url_path    = cfg.scheduler.weather_url_path,
         .elpris_url_path     = cfg.scheduler.elpris_url_path,
         .price_zones         = price_zone_ptrs,
@@ -450,8 +450,7 @@ int main(int argc, char* argv[]) {
         if (g_state.server_pid <= 0) {
             g_state.server_pid = spawn_server(args.server_path);
             if (g_state.server_pid > 0) {
-                wait_for_server(cfg.scheduler.service_host,
-                                atoi(cfg.scheduler.service_port),
+                wait_for_server(cfg.scheduler.service_host, cfg.server_port,
                                 cfg.watchdog.server_ready_wait_ms);
             }
         }

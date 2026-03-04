@@ -50,7 +50,6 @@ typedef struct {
     /* Fetch scheduler */
     struct {
         char service_host[64];
-        char service_port[8];
         char weather_url_path[128];
         char elpris_url_path[128];
         char price_zones[4][8]; /* up to 4 zones, e.g. "SE1" */

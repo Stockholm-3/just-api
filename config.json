@@ -34,7 +34,6 @@
   },
   "scheduler": {
     "service_host": "127.0.0.1",
-    "service_port": "10680",
     "weather_url_path": "/v1/forecast/minutely",
     "elpris_url_path": "/v1/elpris",
     "price_zones": [
