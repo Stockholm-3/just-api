@@ -66,7 +66,7 @@ static void on_signal(int signum) {
     if (signum == SIGTERM || signum == SIGINT) {
         g_shutdown = 1;
         if (g_state.server_pid > 0) {
-            kill(g_state.server_pid, SIGTERM);
+            kill(-g_state.server_pid, SIGTERM);
         }
     }
 }
@@ -136,11 +136,20 @@ static pid_t spawn_server(const char* server_path) {
         LOG_WARN("WATCHDOG", "fork() failed: %s", strerror(errno));
         return -1;
     }
+
     if (pid == 0) {
+        // Create new process group for the server
+        setpgid(0, 0);
+
         execl(server_path, server_path, "--log-dir", g_log_dir, "--base-dir",
               g_base_dir, NULL);
+
         _exit(127);
     }
+
+    // Ensure group is set even if child ran fast
+    setpgid(pid, pid);
+
     LOG_INFO("WATCHDOG", "Server spawned: PID %d", pid);
     return pid;
 }
@@ -429,7 +438,7 @@ int main(int argc, char* argv[]) {
 
     if (fetch_scheduler_start(&sched_thread, &sched_cfg) != 0) {
         LOG_WARN("WATCHDOG", "fetch_scheduler_start failed");
-        kill(g_state.server_pid, SIGTERM);
+        kill(-g_state.server_pid, SIGTERM);
         energy_plan_store_shutdown();
         logger_shutdown();
         return 1;
@@ -467,7 +476,7 @@ int main(int argc, char* argv[]) {
     if (g_state.server_pid > 0) {
         LOG_INFO("WATCHDOG", "Stopping server (PID %d)…", g_state.server_pid);
         int status;
-        kill(g_state.server_pid, SIGTERM);
+        kill(-g_state.server_pid, SIGTERM);
         waitpid(g_state.server_pid, &status, 0);
     }
 

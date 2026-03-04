@@ -168,17 +168,26 @@ daemon-start: $(WATCHDOG) $(SERVER) $(COMPUTE)
 		fi; \
 	fi
 	@echo "Starting watchdog..."
-	@$(WATCHDOG) \
+	@nohup $(WATCHDOG) \
 		--server $(SERVER) \
 		--compute $(COMPUTE) \
-		-- $(ARGS)
+		-- $(ARGS) \
+		> /tmp/watchdog.out 2>&1 & \
+		echo $$! > $(WATCHDOG_PID)
+	@echo "Watchdog started (PID $$(cat $(WATCHDOG_PID)))"
 
 .PHONY: daemon-stop
 daemon-stop:
 	@if [ -f $(WATCHDOG_PID) ]; then \
 		PID=$$(cat $(WATCHDOG_PID)); \
-		kill $$PID 2>/dev/null || true; \
+		echo "Stopping watchdog (PID $$PID)..."; \
+		kill -TERM $$PID 2>/dev/null || true; \
 		rm -f $(WATCHDOG_PID); \
+		sleep 1; \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "Watchdog still running, sending SIGKILL..."; \
+			kill -KILL $$PID 2>/dev/null || true; \
+		fi; \
 		echo "Stopped."; \
 	else \
 		echo "Watchdog not running."; \
