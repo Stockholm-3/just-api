@@ -25,12 +25,12 @@ else
     BUILD_TYPE  := Debug
 endif
 
-# Strict flags for YOUR source code
+# Strict flags for YOUR source code (MMD/MP generate .d dependency files)
 CFLAGS_STRICT := $(CFLAGS_BASE) -Wall -Wextra -MMD -MP
 
-# Loose flags for third-party libraries
-CFLAGS_LOOSE   := -O2 -w
-CXXFLAGS_LOOSE := -O2 -w -std=c++11
+# Loose flags for third-party libraries (also track deps so header changes propagate)
+CFLAGS_LOOSE   := -O2 -w -MMD -MP
+CXXFLAGS_LOOSE := -O2 -w -std=c++11 -MMD -MP
 
 INCLUDES := -I$(INC_DIR) \
             $(shell find $(SRC_DIR) -type d | sed 's/^/-I/') \
@@ -46,7 +46,7 @@ BIN_NAMES   := $(notdir $(wildcard $(BIN_DIR)/*))
 ALL_TARGETS := $(addprefix $(BUILD_DIR)/,$(BIN_NAMES))
 
 # ------------------------------------------------------------
-# Shared sources (everything except src/bin)
+# Shared sources (everything under src/ except src/bin/)
 # ------------------------------------------------------------
 CORE_SRC := $(shell find $(SRC_DIR) -type f -name '*.c' ! -path '$(BIN_DIR)/*')
 CORE_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(CORE_SRC))
@@ -60,18 +60,48 @@ LIB_CPP_OBJ := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(LIB_CPP_SRC))
 COMMON_OBJ := $(CORE_OBJ) $(LIB_OBJ) $(LIB_CPP_OBJ)
 
 # ------------------------------------------------------------
+# Per-binary sources and objects
+# ------------------------------------------------------------
+# For each binary, define its sources and objects.
+# BIN_SRC_<name> and BIN_OBJ_<name> are set dynamically.
+define BINARY_template
+BIN_SRC_$(1) := $$(shell find $(BIN_DIR)/$(1) -type f -name '*.c')
+BIN_OBJ_$(1) := $$(patsubst %.c,$(BUILD_DIR)/%.o,$$(BIN_SRC_$(1)))
+endef
+$(foreach bin,$(BIN_NAMES),$(eval $(call BINARY_template,$(bin))))
+
+# Collect ALL object files across all binaries (for dep file inclusion)
+ALL_BIN_OBJ := $(foreach bin,$(BIN_NAMES),$(BIN_OBJ_$(bin)))
+
+# ------------------------------------------------------------
+# Dependency files — include ALL of them unconditionally.
+# The '-' prefix suppresses errors for files that don't exist yet
+# (first build). On subsequent builds, these .d files tell make
+# exactly which headers each .o depends on, so any header change
+# triggers the right recompilation automatically.
+# ------------------------------------------------------------
+ALL_OBJ  := $(COMMON_OBJ) $(ALL_BIN_OBJ)
+DEP_FILES := $(ALL_OBJ:.o=.d)
+-include $(DEP_FILES)
+
+# ------------------------------------------------------------
 # Default target: build everything
 # ------------------------------------------------------------
 .PHONY: all
 all: $(ALL_TARGETS)
 	@echo "Built all binaries [$(BUILD_TYPE)]"
 
-# Pattern rule to build any discovered binary
-$(BUILD_DIR)/%:
-	@$(MAKE) --no-print-directory BIN=$* build
+# Rule to link each discovered binary directly (no sub-make needed)
+define LINK_template
+$(BUILD_DIR)/$(1): $(COMMON_OBJ) $$(BIN_OBJ_$(1))
+	@mkdir -p $$(dir $$@)
+	@echo "[LD]  $$@"
+	@$(CXX) $(LDFLAGS) $$^ -o $$@ $(LIBS)
+endef
+$(foreach bin,$(BIN_NAMES),$(eval $(call LINK_template,$(bin))))
 
 # ------------------------------------------------------------
-# Single binary build
+# Single binary build  (make build BIN=foo  or  make run BIN=foo)
 # ------------------------------------------------------------
 ifeq ($(filter build run,$(MAKECMDGOALS)),build run)
 ifndef BIN
@@ -81,23 +111,15 @@ endif
 
 TARGET := $(BUILD_DIR)/$(BIN)
 
-BIN_SRC := $(shell find $(BIN_DIR)/$(BIN) -type f -name '*.c')
-BIN_OBJ := $(patsubst %.c,$(BUILD_DIR)/%.o,$(BIN_SRC))
-
 .PHONY: build
 build: $(TARGET)
 	@echo "Built $(BIN) [$(BUILD_TYPE)]"
 
-$(TARGET): $(COMMON_OBJ) $(BIN_OBJ)
-	@mkdir -p $(dir $@)
-	@echo "[LD]  $(TARGET)"
-	@$(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
-
 # ------------------------------------------------------------
-# Compilation rules with progress output
+# Compilation rules
 # ------------------------------------------------------------
 
-# ---- Strict project compilation (src/) ----
+# ---- Strict project C compilation (src/) ----
 $(BUILD_DIR)/src/%.o: src/%.c
 	@mkdir -p $(dir $@)
 	@echo "[CC]  $<"
@@ -134,6 +156,8 @@ COMPUTE  := $(BUILD_DIR)/compute
 
 WATCHDOG_PID := /tmp/jws-watchdog.pid
 
+# Depend on the actual binaries so make rebuilds them if sources changed
+# before attempting to start the daemon.
 .PHONY: daemon-start
 daemon-start: $(WATCHDOG) $(SERVER) $(COMPUTE)
 	@if [ -f $(WATCHDOG_PID) ]; then \
@@ -200,7 +224,6 @@ format:
 		echo "All files properly formatted"; \
 	fi
 
-# Actually fixes formatting
 .PHONY: format-fix
 format-fix:
 	@echo "Applying clang-format..."
@@ -236,7 +259,6 @@ lint-fix:
 	done
 	@echo "Auto-fix complete. Please review changes with 'git diff'."
 
-# CI target: fails only on naming violations
 .PHONY: lint-ci
 lint-ci:
 	@echo "Running clang-tidy for CI (naming violations = errors)..."
@@ -279,7 +301,7 @@ docs-clean:
 	@rm -rf documentation
 	@echo "Documentation removed."
 
-.PHONY : docs-open
+.PHONY: docs-open
 docs-open:
 	@echo "Opening documentation..."
 	@xdg-open documentation/html/index.html
