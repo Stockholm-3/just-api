@@ -1,4 +1,4 @@
-C server providing an energy plan for housholds with solar panels and battery
+C server providing an energy plan for households with solar panels and battery
 
 >Just Weather is a **HTTP server** built as a school project at **Chas Academy (SUVX25)** by **Team Stockholm 3**.  
 >It acts as a bridge between clients and [open-meteo.com](https://open-meteo.com), providing real-time weather data via a simple REST API
@@ -46,6 +46,10 @@ you can stop the daemon with:
 ```bash
 make daemon-stop
 ```
+
+## API DOCS
+
+see [docs/api/api_docs.md](api_docs.md) for API documentation
 
 ## Authors
 
