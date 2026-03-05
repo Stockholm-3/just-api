@@ -206,6 +206,15 @@ daemon-status:
 		echo "Watchdog not running."; \
 	fi
 
+.PHONY: watchdog-foreground
+watchdog-foreground: $(WATCHDOG) $(SERVER) $(COMPUTE)
+	@echo "Running watchdog in foreground..."
+	@$(WATCHDOG) \
+		--foreground \
+		--server $(SERVER) \
+		--compute $(COMPUTE) \
+		$(ARGS)
+
 # ------------------------------------------------------------
 # Utilities
 # ------------------------------------------------------------
