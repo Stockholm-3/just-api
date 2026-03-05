@@ -176,19 +176,18 @@ daemon-start: $(WATCHDOG) $(SERVER) $(COMPUTE)
 		echo $$! > $(WATCHDOG_PID)
 	@echo "Watchdog started (PID $$(cat $(WATCHDOG_PID)))"
 
-.PHONY: daemon-stop
 daemon-stop:
 	@if [ -f $(WATCHDOG_PID) ]; then \
 		PID=$$(cat $(WATCHDOG_PID)); \
 		echo "Stopping watchdog (PID $$PID)..."; \
 		kill -TERM $$PID 2>/dev/null || true; \
 		rm -f $(WATCHDOG_PID); \
-		sleep 1; \
-		if kill -0 $$PID 2>/dev/null; then \
-			echo "Watchdog still running, sending SIGKILL..."; \
-			kill -KILL $$PID 2>/dev/null || true; \
-		fi; \
-		echo "Stopped."; \
+		for i in 1 2 3 4 5 6 7 8 9 10; do \
+			kill -0 $$PID 2>/dev/null || { echo "Stopped."; exit 0; }; \
+			sleep 1; \
+		done; \
+		echo "Watchdog still running after 10s, sending SIGKILL..."; \
+		kill -KILL $$PID 2>/dev/null || true; \
 	else \
 		echo "Watchdog not running."; \
 	fi
