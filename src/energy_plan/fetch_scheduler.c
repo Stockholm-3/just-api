@@ -23,15 +23,15 @@ typedef struct {
 
 static void sync_http_cb(const char* event, const char* response, void* ctx) {
     SyncHttp* h = (SyncHttp*)ctx;
-    h->done     = 1;
-    free(h->body);
-    h->body = NULL;
 
     if (strcmp(event, "RESPONSE") == 0 && response) {
+        free(h->body);
         h->body    = strdup(response);
         h->success = h->body != NULL;
-    } else {
+        h->done    = 1;
+    } else if (strcmp(event, "ERROR") == 0 || strcmp(event, "TIMEOUT") == 0) {
         h->success = 0;
+        h->done    = 1;
     }
 }
 
@@ -53,7 +53,6 @@ static char* http_get(const char* url, const char* port,
         http_client_work(client, system_monotonic_ms());
     }
 
-    http_client_dispose(&client);
     return h.body;
 }
 

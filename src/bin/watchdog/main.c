@@ -388,10 +388,12 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (write_pid_file(cfg.watchdog.pid_file) < 0) {
-        energy_plan_store_shutdown();
-        logger_shutdown();
-        return 1;
+    if (!args.foreground) {
+        if (write_pid_file(cfg.watchdog.pid_file) < 0) {
+            energy_plan_store_shutdown();
+            logger_shutdown();
+            return 1;
+        }
     }
 
     setup_signals();

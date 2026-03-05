@@ -205,7 +205,6 @@ static void on_http_response(const char* event, const char* response,
                              void* context) {
     FetchContext* ctx = (FetchContext*)context;
     if (!ctx || !ctx->conn) {
-        free(ctx);
         return;
     }
 
