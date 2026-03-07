@@ -114,8 +114,8 @@ int main(int argc, char* argv[]) {
 
     struct epoll_event ev = {0};
     ev.events             = EPOLLIN;
-    ev.data.fd            = server.httpServer.tcpServer.listen_fd;
-    epoll_ctl(epfd, EPOLL_CTL_ADD, server.httpServer.tcpServer.listen_fd, &ev);
+    ev.data.fd            = server.http_server.tcpServer.listen_fd;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, server.http_server.tcpServer.listen_fd, &ev);
 
     struct epoll_event events[EPOLL_MAX_EVENTS];
     while (!g_shutdown_requested) {

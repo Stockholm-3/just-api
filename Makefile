@@ -36,6 +36,8 @@ INCLUDES := -I$(INC_DIR) \
             $(shell find $(SRC_DIR) -type d | sed 's/^/-I/') \
             $(shell find -L $(LIB_DIR) -type d | sed 's/^/-I/')
 
+LINT_INCLUDES := $(patsubst %,--extra-arg=%,$(INCLUDES))
+
 LDFLAGS :=
 LIBS := -lmbedtls -lmbedx509 -lmbedcrypto -pthread -lstdc++
 
@@ -144,8 +146,15 @@ ARGS ?=
 
 .PHONY: run
 run: build
+ifeq ($(BIN),watchdog)
+run: $(BUILD_DIR)/server $(BUILD_DIR)/compute
+endif
 	@echo "Running $(BIN)..."
+ifeq ($(BIN),watchdog)
+	@./$(TARGET) --server $(SERVER) --compute $(COMPUTE) $(ARGS)
+else
 	@./$(TARGET) $(ARGS)
+endif
 
 # ------------------------------------------------------------
 # Daemon management
@@ -284,6 +293,7 @@ lint-ci:
 	while IFS= read -r -d '' file; do \
 		echo "→ Checking $$file"; \
 		if ! clang-tidy "$$file" \
+			$(LINT_INCLUDES) \
 			--config-file=.clang-tidy \
 			--quiet \
 			--header-filter='^(src)/' \

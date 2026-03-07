@@ -41,7 +41,7 @@
  */
 typedef struct {
     /** @brief Embedded HTTP server for handling connections. */
-    HTTPServer httpServer;
+    HTTPServer http_server;
 
     /** @brief Linked list of active WeatherServerInstance pointers. */
     LinkedList* instances;
@@ -51,6 +51,12 @@ typedef struct {
 
     /** @brief Thread pool for offloading blocking request work. */
     ThreadPool* request_pool;
+
+    /** @brief Epoll fd monitoring all active client connection fds. */
+    int conn_epfd;
+
+    /** @brief Monotonic time of last full timeout scan (ms). */
+    uint64_t last_timeout_scan_ms;
 
 } WeatherServer;
 

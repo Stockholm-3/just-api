@@ -117,6 +117,21 @@ void weather_server_instance_work(WeatherServerInstance* instance,
                                   uint64_t               mon_time);
 
 /**
+ * @brief Throttled time-based check for each active instance.
+ *
+ * Called by the WeatherServer scheduler task once per second for all
+ * active instances. Intended for keepalive timeout enforcement, idle
+ * eviction, and per-connection metrics collection.
+ *
+ * @param[in] instance Pointer to the WeatherServerInstance.
+ * @param[in] mon_time Current scheduler time in ms.
+ *
+ * @note Currently a no-op, reserved for future timeout/cleanup logic.
+ */
+void weather_server_instance_timeout_check(WeatherServerInstance* instance,
+                                           uint64_t               mon_time);
+
+/**
  * @brief Dispose of a stack-allocated WeatherServerInstance.
  *
  * Releases any resources owned by the instance, such as temporary
