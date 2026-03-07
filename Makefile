@@ -303,6 +303,31 @@ lint-ci:
 install-lib:
 	git clone https://github.com/stockholm-3/lib.git ../lib
 
+#------------------------------------------------------------------------------
+# Docker for deployment
+#------------------------------------------------------------------------------
+.PHONY: docker-build
+docker-build:
+	docker build -t just-api .
+
+.PHONY: docker-run
+docker-run:
+	mkdir -p energy_plan cache logs
+	-docker rm -f just-api 2>/dev/null || true
+	docker run -d \
+		--name just-api \
+		-u $$(id -u):$$(id -g) \
+		-p 10680:10680 \
+		-v $(shell pwd)/config.json:/app/config.json \
+		-v $(shell pwd)/energy_plan:/app/energy_plan \
+		-v $(shell pwd)/cache:/app/cache \
+		-v $(shell pwd)/logs:/app/logs \
+		just-api
+
+.PHONY: docker-stop
+docker-stop:
+	docker stop just-api
+
 # ------------------------------------------------------------
 # Documentation
 # ------------------------------------------------------------
