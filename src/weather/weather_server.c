@@ -53,11 +53,12 @@ int weather_server_on_http_connection(void*                 context,
  *
  * @return 0 on success.
  */
-int weather_server_initiate(WeatherServer* server) {
+int weather_server_initiate(WeatherServer* server, ThreadPool* request_pool) {
     http_server_initiate(&server->httpServer,
                          weather_server_on_http_connection);
 
-    server->instances = linked_list_create();
+    server->instances    = linked_list_create();
+    server->request_pool = request_pool;
 
     server->task = smw_create_task(server, weather_server_task_work);
 
@@ -71,7 +72,8 @@ int weather_server_initiate(WeatherServer* server) {
  *
  * @return 0 on success, -1 if server_ptr is NULL, -2 if allocation fails.
  */
-int weather_server_initiate_ptr(WeatherServer** server_ptr) {
+int weather_server_initiate_ptr(WeatherServer** server_ptr,
+                                ThreadPool*     request_pool) {
     if (server_ptr == NULL) {
         return -1;
     }
@@ -81,7 +83,7 @@ int weather_server_initiate_ptr(WeatherServer** server_ptr) {
         return -2;
     }
 
-    int result = weather_server_initiate(server);
+    int result = weather_server_initiate(server, request_pool);
     if (result != 0) {
         free(server);
         return result;

@@ -4,43 +4,26 @@
 #include "config_types.h"
 
 /**
- * @brief Parse configuration from file.
+ * @brief Load configuration from a JSON file.
  *
- * Supports both JSON and simple key=value format.
- * Falls back to defaults for missing values.
+ * Starts from defaults, then overlays values present in the file.
+ * Missing keys keep their default values.
  *
- * @param[in]  filepath Path to config file
- * @param[out] config   Pointer to config structure to populate
- *
- * @return 0 on success, -1 on file error, -2 on parse error
+ * @param filepath  Path to config JSON file.
+ * @param config    Output config struct.
+ * @return 0 on success, -1 on file/IO error, -2 on parse error.
  */
 int config_parser_load(const char* filepath, ServerConfig* config);
 
 /**
- * @brief Parse configuration from command-line arguments.
- *
- * @param[in]  argc   Argument count
- * @param[in]  argv   Argument vector
- * @param[out] config Config structure to populate
- *
- * @return 0 on success, -1 on error
- */
-int config_parser_from_args(int argc, char* argv[], ServerConfig* config);
-
-/**
- * @brief Validate configuration values.
- *
- * @param[in] config Configuration to validate
- *
- * @return 0 if valid, -1 if invalid
+ * @brief Validate a loaded config.
+ * @return 0 if valid, -1 otherwise (prints reason to stderr).
  */
 int config_parser_validate(const ServerConfig* config);
 
 /**
- * @brief Print current configuration (for debugging).
- *
- * @param[in] config Configuration to print
+ * @brief Print config to stdout (debug).
  */
 void config_parser_print(const ServerConfig* config);
 
-#endif // CONFIG_PARSER_H
+#endif /* CONFIG_PARSER_H */

@@ -31,6 +31,7 @@
 #include "http_server.h"
 #include "linked_list.h"
 #include "smw.h"
+#include "thread_pool.h"
 
 /**
  * @brief Main weather server structure.
@@ -47,6 +48,9 @@ typedef struct {
 
     /** @brief Scheduler task for periodic instance work. */
     SmwTask* task;
+
+    /** @brief Thread pool for offloading blocking request work. */
+    ThreadPool* request_pool;
 
 } WeatherServer;
 
@@ -74,7 +78,7 @@ typedef struct {
  * }
  * @endcode
  */
-int weather_server_initiate(WeatherServer* server);
+int weather_server_initiate(WeatherServer* server, ThreadPool* request_pool);
 
 /**
  * @brief Allocate and initialize a WeatherServer dynamically.
@@ -106,7 +110,8 @@ int weather_server_initiate(WeatherServer* server);
  * }
  * @endcode
  */
-int weather_server_initiate_ptr(WeatherServer** server_ptr);
+int weather_server_initiate_ptr(WeatherServer** server_ptr,
+                                ThreadPool*     request_pool);
 
 /**
  * @brief Shut down and clean up a stack-allocated WeatherServer.
