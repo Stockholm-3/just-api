@@ -40,6 +40,16 @@ LDFLAGS :=
 LIBS := -lmbedtls -lmbedx509 -lmbedcrypto -pthread -lstdc++
 
 # ------------------------------------------------------------
+# Valgrind / Memcheck
+# ------------------------------------------------------------
+MEMCHECK := valgrind \
+	--tool=memcheck \
+	--leak-check=full \
+	--show-leak-kinds=all \
+	--track-origins=yes \
+	--errors-for-leak-kinds=definite \
+	--error-exitcode=1
+# ------------------------------------------------------------
 # Auto-discover binaries
 # ------------------------------------------------------------
 BIN_NAMES   := $(notdir $(wildcard $(BIN_DIR)/*))
@@ -146,6 +156,22 @@ ARGS ?=
 run: build
 	@echo "Running $(BIN)..."
 	@./$(TARGET) $(ARGS)
+
+.PHONY: valgrind
+valgrind: all
+	@echo "Running Valgrind on all binaries..."
+	@for b in $(BIN_NAMES); do \
+		echo ""; \
+		echo "=== $$b ==="; \
+		valgrind --leak-check=full --show-leak-kinds=all \
+		         --track-origins=yes \
+		         ./$(BUILD_DIR)/$$b; \
+	done
+
+.PHONY: memcheck
+memcheck: build
+	@echo "Running Memcheck on $(BIN)..."
+	@$(MEMCHECK) ./$(TARGET) $(ARGS)
 
 # ------------------------------------------------------------
 # Daemon management
