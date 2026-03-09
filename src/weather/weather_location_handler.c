@@ -93,6 +93,7 @@ static int ensure_initialized(void) {
 
     if (geocoding_api_init(&geo_config) != 0) {
         LOG_ERROR("WEATHER_LOCATION", "Failed to init geocoding API");
+        open_meteo_handler_cleanup();
         return -1;
     }
 

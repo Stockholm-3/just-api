@@ -130,7 +130,13 @@ void weather_server_instance_timeout_check(WeatherServerInstance* instance,
 }
 
 void weather_server_instance_dispose(WeatherServerInstance* instance) {
-    /* Reserved for future cleanup logic */
+    if (instance == NULL) {
+        return;
+    }
+
+    if (instance->connection != NULL) {
+        http_server_connection_dispose_ptr(&instance->connection);
+    }
 }
 
 /**

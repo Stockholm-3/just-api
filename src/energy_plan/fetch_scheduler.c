@@ -53,6 +53,11 @@ static char* http_get(const char* url, const char* port,
         http_client_work(client, system_monotonic_ms());
     }
 
+    /* Callback marks completion before the client object is reclaimed. */
+    if (client != NULL) {
+        http_client_dispose(&client);
+    }
+
     return h.body;
 }
 

@@ -31,6 +31,8 @@
  */
 void weather_server_task_work(void* context, uint64_t mon_time);
 
+static void weather_server_instance_free(void* item);
+
 /**
  * @brief HTTP connection callback for new client connections.
  * @internal
@@ -45,6 +47,16 @@ void weather_server_task_work(void* context, uint64_t mon_time);
  */
 int weather_server_on_http_connection(void*                 context,
                                       HTTPServerConnection* connection);
+
+static void weather_server_instance_free(void* item) {
+    WeatherServerInstance* instance = (WeatherServerInstance*)item;
+    if (instance == NULL) {
+        return;
+    }
+
+    weather_server_instance_dispose(instance);
+    free(instance);
+}
 
 /* ============= Public API Implementation ============= */
 
@@ -154,9 +166,21 @@ void weather_server_task_work(void* context, uint64_t mon_time) {
     /* Time-driven: throttled full scan for timeout/cleanup checks (1s) */
     if (mon_time - server->last_timeout_scan_ms >= 1000) {
         server->last_timeout_scan_ms = mon_time;
-        LinkedList_foreach(server->instances, node) {
+        Node* node = server->instances->head;
+        while (node != NULL) {
+            Node* next = node->front;
             WeatherServerInstance* inst = (WeatherServerInstance*)node->item;
+
+            if (inst == NULL || inst->connection == NULL ||
+                inst->connection->task == NULL) {
+                linked_list_remove(server->instances, node,
+                                   weather_server_instance_free);
+                node = next;
+                continue;
+            }
+
             weather_server_instance_timeout_check(inst, mon_time);
+            node = next;
         }
     }
 }
@@ -169,12 +193,7 @@ void weather_server_task_work(void* context, uint64_t mon_time) {
  * @param[in] server Server to dispose.
  */
 void weather_server_dispose(WeatherServer* server) {
-    /* Cleanup all instances to prevent memory leak */
-    LinkedList_foreach(server->instances, node) {
-        WeatherServerInstance* instance = (WeatherServerInstance*)node->item;
-        weather_server_instance_dispose(instance);
-    }
-    linked_list_dispose(&server->instances, free);
+    linked_list_dispose(&server->instances, weather_server_instance_free);
 
     close(server->conn_epfd);
     http_server_dispose(&server->http_server);
