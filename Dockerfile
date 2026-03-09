@@ -43,7 +43,7 @@ COPY --from=builder /app/build/release ./build/release
 COPY data/ ./data
 
 # Create any writable dirs and chown everything after all COPYs
-RUN mkdir -p /app/logs && chown -R appuser:appuser /app
+RUN mkdir -p /app/logs /app/cache /app/energy_plan && chown -R appuser:appuser /app
 
 USER appuser
 
