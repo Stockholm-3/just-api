@@ -8,6 +8,7 @@ compile_commands.json
 /documentation/
 logs/
 /energy_plan/
+.env
 
 #logs
 *.log
