@@ -166,9 +166,9 @@ void weather_server_task_work(void* context, uint64_t mon_time) {
     /* Time-driven: throttled full scan for timeout/cleanup checks (1s) */
     if (mon_time - server->last_timeout_scan_ms >= 1000) {
         server->last_timeout_scan_ms = mon_time;
-        Node* node = server->instances->head;
+        Node* node                   = server->instances->head;
         while (node != NULL) {
-            Node* next = node->front;
+            Node*                  next = node->front;
             WeatherServerInstance* inst = (WeatherServerInstance*)node->item;
 
             if (inst == NULL || inst->connection == NULL ||
