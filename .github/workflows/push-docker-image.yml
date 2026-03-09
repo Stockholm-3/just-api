@@ -44,7 +44,7 @@ jobs:
 
       # 6. Make the GHCR package public
       - name: Setup GitHub CLI
-        uses: actions/setup-gh-cli@v3
+        uses: cli/gh-action@v3
 
       - name: Make GHCR package public
         run: |
