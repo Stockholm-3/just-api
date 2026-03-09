@@ -1,17 +1,13 @@
 name: Build & Publish Docker Image
-
 on:
   push:
     branches: [ main ]
-
 permissions:
   contents: read
   packages: write
-
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-
     steps:
       # 1. Checkout the repository
       - uses: actions/checkout@v4
@@ -42,16 +38,22 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ env.OWNER_LC }}/${{ github.event.repository.name }}:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ env.OWNER_LC }}/${{ github.event.repository.name }}:buildcache,mode=max
 
-      # 6. Install GitHub CLI
-      - name: Setup GitHub CLI
-        uses: actions/setup-gh@v3
-
-      # 7. Make the GHCR package public
+      # 6. Make the GHCR package public (gh CLI is pre-installed on ubuntu-latest)
       - name: Make GHCR package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+          REPO_NAME=${{ github.event.repository.name }}
+          OWNER=${{ env.OWNER_LC }}
+
+          # Try org endpoint first, fall back to user endpoint
           gh api \
             --method PATCH \
             -H "Accept: application/vnd.github+json" \
-            /orgs/${{ env.OWNER_LC }}/packages/container/${{ github.event.repository.name }} \
+            /orgs/${OWNER}/packages/container/${REPO_NAME} \
+            -f visibility=public \
+          || gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            /user/packages/container/${REPO_NAME} \
             -f visibility=public
