@@ -2,7 +2,6 @@
 # Stage 1 — Build
 # ----------------------------
 FROM ubuntu:22.04 AS builder
-
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
@@ -15,11 +14,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
-
 RUN git submodule update --init --recursive
-
 RUN make BUILD_MODE=release all
-
 
 # ----------------------------
 # Stage 2 — Runtime
@@ -34,18 +30,21 @@ RUN apt-get update && apt-get install -y \
     libmbedx509-1 \
     libmbedcrypto7 \
     ca-certificates \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
+# Create appuser — UID/GID will be remapped at runtime by entrypoint.sh
 RUN useradd -r -s /usr/sbin/nologin appuser
 
-# Copy files first (as root), then fix ownership in one layer
 COPY --from=builder /app/build/release ./build/release
 COPY data/ ./data
+COPY entrypoint.sh ./entrypoint.sh
 
-# Create any writable dirs and chown everything after all COPYs
-RUN mkdir -p /app/logs /app/cache /app/energy_plan && chown -R appuser:appuser /app
+# Pre-create writable dirs and own everything as appuser
+# entrypoint.sh will re-chown to the host UID/GID before exec
+RUN mkdir -p /app/logs /app/cache /app/energy_plan \
+    && chown -R appuser:appuser /app \
+    && chmod +x ./entrypoint.sh
 
-USER appuser
-
-ENTRYPOINT ["./build/release/watchdog"]
-CMD ["--foreground", "--server", "./build/release/server", "--compute", "./build/release/compute"]
+# Entrypoint runs as root so it can remap UIDs, then drops to appuser via gosu
+ENTRYPOINT ["./entrypoint.sh"]
