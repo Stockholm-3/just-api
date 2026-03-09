@@ -42,13 +42,14 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ env.OWNER_LC }}/${{ github.event.repository.name }}:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ env.OWNER_LC }}/${{ github.event.repository.name }}:buildcache,mode=max
 
-      # 6. Make the GHCR package public
+      # 6. Install GitHub CLI
       - name: Setup GitHub CLI
-        uses: cli/gh-action@v3
+        uses: actions/setup-gh@v3
 
+      # 7. Make the GHCR package public
       - name: Make GHCR package public
         run: |
-          gh auth login --with-token <<< "${{ secrets.GITHUB_TOKEN }}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
           gh api \
             --method PATCH \
             -H "Accept: application/vnd.github+json" \
