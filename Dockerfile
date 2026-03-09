@@ -16,8 +16,7 @@ RUN apt-get update && apt-get install -y \
 
 COPY . .
 
-RUN rm -rf lib
-RUN git clone https://github.com/stockholm-3/lib.git lib
+RUN git submodule update --init --recursive
 
 RUN make BUILD_MODE=release all
 
