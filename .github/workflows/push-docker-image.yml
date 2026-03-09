@@ -37,7 +37,7 @@ jobs:
 
       - name: Make GHCR package public
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PACKAGES_PAT }}
         run: |
           REPO_NAME=${{ github.event.repository.name }}
           OWNER=${{ env.OWNER_LC }}
