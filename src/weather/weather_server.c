@@ -14,6 +14,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/epoll.h>
+#include <unistd.h>
 
 /* ============= Internal Function Declarations ============= */
 
@@ -54,11 +56,13 @@ int weather_server_on_http_connection(void*                 context,
  * @return 0 on success.
  */
 int weather_server_initiate(WeatherServer* server, ThreadPool* request_pool) {
-    http_server_initiate(&server->httpServer,
+    http_server_initiate(&server->http_server,
                          weather_server_on_http_connection);
 
-    server->instances    = linked_list_create();
-    server->request_pool = request_pool;
+    server->instances            = linked_list_create();
+    server->request_pool         = request_pool;
+    server->conn_epfd            = epoll_create1(EPOLL_CLOEXEC);
+    server->last_timeout_scan_ms = 0;
 
     server->task = smw_create_task(server, weather_server_task_work);
 
@@ -118,6 +122,11 @@ int weather_server_on_http_connection(void*                 context,
 
     linked_list_append(server->instances, instance);
 
+    struct epoll_event ev = {0};
+    ev.events             = EPOLLIN;
+    ev.data.ptr           = instance;
+    epoll_ctl(server->conn_epfd, EPOLL_CTL_ADD, connection->tcpClient.fd, &ev);
+
     return 0;
 }
 
@@ -133,9 +142,22 @@ int weather_server_on_http_connection(void*                 context,
 void weather_server_task_work(void* context, uint64_t mon_time) {
     WeatherServer* server = (WeatherServer*)context;
 
-    LinkedList_foreach(server->instances, node) {
-        WeatherServerInstance* instance = (WeatherServerInstance*)node->item;
+    /* I/O-driven: only process connections with pending events */
+    struct epoll_event events[64];
+    int                n = epoll_wait(server->conn_epfd, events, 64, 0);
+    for (int i = 0; i < n; i++) {
+        WeatherServerInstance* instance =
+            (WeatherServerInstance*)events[i].data.ptr;
         weather_server_instance_work(instance, mon_time);
+    }
+
+    /* Time-driven: throttled full scan for timeout/cleanup checks (1s) */
+    if (mon_time - server->last_timeout_scan_ms >= 1000) {
+        server->last_timeout_scan_ms = mon_time;
+        LinkedList_foreach(server->instances, node) {
+            WeatherServerInstance* inst = (WeatherServerInstance*)node->item;
+            weather_server_instance_timeout_check(inst, mon_time);
+        }
     }
 }
 
@@ -154,7 +176,8 @@ void weather_server_dispose(WeatherServer* server) {
     }
     linked_list_dispose(&server->instances, free);
 
-    http_server_dispose(&server->httpServer);
+    close(server->conn_epfd);
+    http_server_dispose(&server->http_server);
     smw_destroy_task(server->task);
 }
 

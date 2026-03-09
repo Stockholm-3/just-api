@@ -124,6 +124,11 @@ void weather_server_instance_work(WeatherServerInstance* instance,
  *
  * @param[in] instance Instance to dispose.
  */
+void weather_server_instance_timeout_check(WeatherServerInstance* instance,
+                                           uint64_t               mon_time) {
+    /* Reserved for keepalive timeout, idle eviction, metrics, etc. */
+}
+
 void weather_server_instance_dispose(WeatherServerInstance* instance) {
     /* Reserved for future cleanup logic */
 }
