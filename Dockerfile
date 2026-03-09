@@ -25,7 +25,6 @@ RUN make BUILD_MODE=release all
 # Stage 2 — Runtime
 # ----------------------------
 FROM ubuntu:22.04
-
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
@@ -39,10 +38,12 @@ RUN apt-get update && apt-get install -y \
 
 RUN useradd -r -s /usr/sbin/nologin appuser
 
-RUN mkdir -p /app/logs && chown -R appuser:appuser /app
-
+# Copy files first (as root), then fix ownership in one layer
 COPY --from=builder /app/build/release ./build/release
 COPY data/ ./data
+
+# Create any writable dirs and chown everything after all COPYs
+RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 
 USER appuser
 
