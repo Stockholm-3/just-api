@@ -9,19 +9,58 @@
 
 #include <jansson.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define LOG_MOD "COMPUTE"
 
+// Replace gmtime_r with a Swedish-local conversion
+static void format_swedish_time(time_t t, char* buf, size_t len) {
+    struct tm utc;
+    gmtime_r(&t, &utc);
+
+    // Determine offset (same DST logic as elpris_api.c)
+    int       year  = utc.tm_year + 1900;
+    struct tm march = {
+        .tm_year = year - 1900, .tm_mon = 2, .tm_mday = 31, .tm_hour = 1};
+    mktime(&march);
+    march.tm_mday -= march.tm_wday;
+    struct tm october = {
+        .tm_year = year - 1900, .tm_mon = 9, .tm_mday = 31, .tm_hour = 1};
+    mktime(&october);
+    october.tm_mday -= october.tm_wday;
+
+    time_t dst_start = mktime(&march);
+    time_t dst_end   = mktime(&october);
+    int    offset_h  = (t >= dst_start && t < dst_end) ? 2 : 1;
+
+    time_t    local = t + offset_h * 3600;
+    struct tm tm_local;
+    gmtime_r(&local, &tm_local);
+    strftime(buf, len, "%Y-%m-%dT%H:%M:%S", &tm_local);
+    // Append offset manually
+    snprintf(buf + strlen(buf), len - strlen(buf), "+%02d:00", offset_h);
+}
+
 static json_t* slot_to_json(int idx, const AlgoInput* in, const AlgoSlot* s) {
     json_t* o = json_object();
-    json_object_set_new(o, "slot", json_integer(idx));
-    json_object_set_new(o, "elpris", json_real(in->elpris[idx]));
-    json_object_set_new(o, "temperature", json_real(in->temperature[idx]));
-    json_object_set_new(o, "sun_intensity", json_real(in->sun_intensity[idx]));
-    json_object_set_new(o, "buy_electricity", json_real(s->buy_electricity));
-    json_object_set_new(o, "direct_use", json_real(s->direct_use));
-    json_object_set_new(o, "charge_battery", json_real(s->charge_battery));
-    json_object_set_new(o, "sell_excess", json_real(s->sell_excess));
+
+    // Input variables
+    json_t* input = json_object();
+    json_object_set_new(input, "elpris", json_real(in->elpris[idx]));
+    json_object_set_new(input, "temperature", json_real(in->temperature[idx]));
+    json_object_set_new(input, "sun_intensity",
+                        json_real(in->sun_intensity[idx]));
+    json_object_set_new(o, "input_variables", input);
+
+    // Algorithm output
+    json_t* output = json_object();
+    json_object_set_new(output, "buy_electricity",
+                        json_real(s->buy_electricity));
+    json_object_set_new(output, "direct_use", json_real(s->direct_use));
+    json_object_set_new(output, "charge_battery", json_real(s->charge_battery));
+    json_object_set_new(output, "sell_excess", json_real(s->sell_excess));
+    json_object_set_new(o, "output", output);
+
     return o;
 }
 
@@ -35,16 +74,24 @@ static json_t* summary_to_json(const AlgoSlot* s) {
 }
 
 static json_t* build_output(const char* city, const char* zone, double lat,
-                            double lon, const AlgoInput* in,
+                            double lon, time_t start_time, const AlgoInput* in,
                             const AlgoOutput* out) {
     int slots = (in->slots > 0 && in->slots <= SLOTS_PER_DAY) ? in->slots
                                                               : SLOTS_PER_DAY;
+
+    // Format start_time as ISO-8601 UTC string, e.g. "2026-03-10T00:00:00Z"
+    char      ts_buf[32] = "";
+    struct tm tm_utc;
+    if (start_time != 0) {
+        format_swedish_time(start_time, ts_buf, sizeof(ts_buf));
+    }
 
     json_t* root = json_object();
     json_object_set_new(root, "city", json_string(city));
     json_object_set_new(root, "price_zone", json_string(zone));
     json_object_set_new(root, "latitude", json_real(lat));
     json_object_set_new(root, "longitude", json_real(lon));
+    json_object_set_new(root, "start_time", json_string(ts_buf));
     json_object_set_new(root, "slots_total", json_integer(slots));
     json_object_set_new(root, "summary", summary_to_json(&out->summary));
 
@@ -125,7 +172,8 @@ int main(void) {
         AlgoOutput out;
         algo_run(&in, &out);
 
-        json_t* result = build_output(city_name, zone, lat, lon, &in, &out);
+        json_t* result = build_output(city_name, zone, lat, lon,
+                                      elpris->start_time, &in, &out);
         int     rc = energy_plan_store_write_output(city_name, zone, result);
         json_decref(result);
 

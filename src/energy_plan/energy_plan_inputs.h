@@ -24,11 +24,15 @@
 
 #include "algo.h" /* AlgoInput — parser fills this and  algo owns the shape */
 
+#include <time.h>
+
 #define EP_NUM_ZONES 4
 
 /** Parsed price table for all four SE zones, one day. */
 typedef struct {
     double sek_per_kwh[EP_NUM_ZONES][SLOTS_PER_DAY];
+    time_t
+        start_time; /**< UTC epoch of the first slot (midnight local time). */
 } EpElprisData;
 
 /**

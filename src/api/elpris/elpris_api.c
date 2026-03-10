@@ -11,11 +11,23 @@
 #include <time.h>
 
 #define BASE_URL "https://www.elprisetjustnu.se/api/v1/prices/"
-#define DEFAULT_CACHE_DIR "./cache/elpris_latest"
+#define LATEST_CACHE_DIR "./cache/elpris_latest"
+#define HISTORICAL_CACHE_DIR "./cache/elpris_historical"
 #define HISTORICAL_CACHE_TTL (60 * 60 * 24 * 365 * 10) /* 10 years */
 
-static FileCacheInstance* g_latest_cache     = NULL;
+/* Historical cache is a long-lived singleton — its TTL policy never changes. */
 static FileCacheInstance* g_historical_cache = NULL;
+
+/*
+ * The "latest" cache is date-stamped. If the date we consider "latest"
+ * advances (i.e. it's past 13:00 and tomorrow's prices are now current),
+ * we tear down the old instance and rebuild it with a fresh TTL so we
+ * never serve stale data thinking it's current.
+ */
+static FileCacheInstance* g_latest_cache       = NULL;
+static unsigned int       g_latest_cache_year  = 0;
+static unsigned int       g_latest_cache_month = 0;
+static unsigned int       g_latest_cache_day   = 0;
 
 /* ============================================================================
  * Swedish Time Utilities
@@ -24,14 +36,14 @@ static FileCacheInstance* g_historical_cache = NULL;
 static int is_swedish_dst(const struct tm* utc) {
     int year = utc->tm_year + 1900;
 
-    /* Last Sunday of March */
+    /* Last Sunday of March at 01:00 UTC */
     struct tm march = {
         .tm_year = year - 1900, .tm_mon = 2, .tm_mday = 31, .tm_hour = 1};
     mktime(&march);
     march.tm_mday -= march.tm_wday;
     time_t dst_start = mktime(&march);
 
-    /* Last Sunday of October */
+    /* Last Sunday of October at 01:00 UTC */
     struct tm october = {
         .tm_year = year - 1900, .tm_mon = 9, .tm_mday = 31, .tm_hour = 1};
     mktime(&october);
@@ -53,6 +65,11 @@ static void swedish_time_now(struct tm* out) {
     gmtime_r(&now, out);
 }
 
+/*
+ * Returns seconds until the next 13:00 Swedish time.
+ * This is used as the TTL for the "latest" cache entry so it expires
+ * exactly when new prices become available.
+ */
 static int seconds_until_next_13(void) {
     struct tm se;
     swedish_time_now(&se);
@@ -73,26 +90,42 @@ static int seconds_until_next_13(void) {
     return (int)difftime(cutoff, now);
 }
 
+/*
+ * Returns the date whose prices are considered "latest":
+ *   - Before 13:00 Swedish time → today
+ *   - At or after 13:00           → tomorrow (next-day prices are published)
+ */
 static void get_latest_date(unsigned int* year, unsigned int* month,
                             unsigned int* day) {
     struct tm se;
     swedish_time_now(&se);
 
-    /* After 13:00, tomorrow's prices */
     if (se.tm_hour >= 13) {
         se.tm_mday += 1;
-        mktime(&se);
+        mktime(&se); /* normalise overflow */
     }
 
-    *year  = se.tm_year + 1900;
-    *month = se.tm_mon + 1;
-    *day   = se.tm_mday;
+    *year  = (unsigned int)(se.tm_year + 1900);
+    *month = (unsigned int)(se.tm_mon + 1);
+    *day   = (unsigned int)se.tm_mday;
 }
 
 /* ============================================================================
  * Cache Management
  * ========================================================================= */
 
+/*
+ * Returns the appropriate cache instance for the requested date.
+ *
+ * Key fix: the "latest" cache singleton is invalidated and recreated whenever
+ * the date we consider "latest" has advanced. This prevents the old instance
+ * (with a near-zero or already-expired TTL) from being reused for the new
+ * current date and incorrectly serving — or immediately discarding — fresh
+ * data.
+ *
+ * Separate cache directories ensure that historical (10-year TTL) and latest
+ * (TTL-until-13:00) policies never interfere with each other.
+ */
 static FileCacheInstance* get_cache(unsigned int year, unsigned int month,
                                     unsigned int day) {
     unsigned int latest_year, latest_month, latest_day;
@@ -102,17 +135,49 @@ static FileCacheInstance* get_cache(unsigned int year, unsigned int month,
         (year == latest_year && month == latest_month && day == latest_day);
 
     if (is_latest) {
+        /* Invalidate if the "latest" date has rolled over since we last built
+         * the cache instance. */
+        int date_changed =
+            (g_latest_cache != NULL) && (g_latest_cache_year != latest_year ||
+                                         g_latest_cache_month != latest_month ||
+                                         g_latest_cache_day != latest_day);
+
+        if (date_changed) {
+            LOG_DEBUG("ELPRIS",
+                      "Latest date rolled over from %04u-%02u-%02u to "
+                      "%04u-%02u-%02u — invalidating latest cache",
+                      g_latest_cache_year, g_latest_cache_month,
+                      g_latest_cache_day, latest_year, latest_month,
+                      latest_day);
+            file_cache_destroy(g_latest_cache);
+            g_latest_cache       = NULL;
+            g_latest_cache_year  = 0;
+            g_latest_cache_month = 0;
+            g_latest_cache_day   = 0;
+        }
+
         if (!g_latest_cache) {
-            FileCacheConfig cfg = {.cache_dir   = DEFAULT_CACHE_DIR,
-                                   .ttl_seconds = seconds_until_next_13(),
+            int ttl = seconds_until_next_13();
+            LOG_DEBUG("ELPRIS",
+                      "Creating latest cache for %04u-%02u-%02u (TTL=%ds)",
+                      latest_year, latest_month, latest_day, ttl);
+
+            FileCacheConfig cfg = {.cache_dir   = LATEST_CACHE_DIR,
+                                   .ttl_seconds = ttl,
                                    .enabled     = true};
             g_latest_cache      = file_cache_create(&cfg);
+
+            g_latest_cache_year  = latest_year;
+            g_latest_cache_month = latest_month;
+            g_latest_cache_day   = latest_day;
         }
+
         return g_latest_cache;
     }
 
+    /* Historical — one long-lived singleton is fine; TTL never changes. */
     if (!g_historical_cache) {
-        FileCacheConfig cfg = {.cache_dir   = DEFAULT_CACHE_DIR,
+        FileCacheConfig cfg = {.cache_dir   = HISTORICAL_CACHE_DIR,
                                .ttl_seconds = HISTORICAL_CACHE_TTL,
                                .enabled     = true};
         g_historical_cache  = file_cache_create(&cfg);
@@ -182,7 +247,7 @@ static ParsedQuery parse_query(const char* query) {
         return result;
     }
 
-    /* No date use latest */
+    /* No date supplied — use latest */
     if (result.year == 0) {
         get_latest_date(&result.year, &result.month, &result.day);
     }
@@ -217,11 +282,9 @@ static void on_http_response(const char* event, const char* response,
                             strlen(response));
         }
 
-        /* Send to client */
         send_response(ctx->conn, 200, "application/json", response,
                       strlen(response));
     } else {
-        /* Handle errors */
         if (strcmp(event, "ERROR") == 0) {
             LOG_ERROR("ELPRIS", "HTTP error: %s",
                       response ? response : "unknown");
@@ -250,17 +313,15 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
         return -1;
     }
 
-    /* Parse query */
     ParsedQuery parsed = parse_query(query);
     if (!parsed.valid) {
         send_json_message(
             conn, 400,
-            "Invalid query. Format: ?price=SE3&date=2024-01-15. Note: date is "
-            "optional, it will give lates price in absence");
+            "Invalid query. Format: ?price=SE3&date=2024-01-15. "
+            "Note: date is optional, omitting it returns the latest price.");
         return -1;
     }
 
-    /* Get cache */
     FileCacheInstance* cache = get_cache(parsed.year, parsed.month, parsed.day);
 
     /* Build cache key */
@@ -286,7 +347,7 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
         }
     }
 
-    /* Prepare async fetch */
+    /* Cache miss — fetch asynchronously */
     FetchContext* ctx = malloc(sizeof(FetchContext));
     if (!ctx) {
         send_json_message(conn, 500, "Memory allocation failed");
@@ -297,7 +358,6 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
     ctx->cache = cache;
     strncpy(ctx->cache_key, cache_key, FILE_CACHE_KEY_LENGTH);
 
-    /* Build URL and fetch */
     char url[128];
     snprintf(url, sizeof(url), BASE_URL "%04u/%02u-%02u_%s.json", parsed.year,
              parsed.month, parsed.day, parsed.price_group);
