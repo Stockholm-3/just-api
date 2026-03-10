@@ -1,6 +1,9 @@
 #ifndef _XOPEN_SOURCE
 #    define _XOPEN_SOURCE
 #endif
+#ifndef _GNU_SOURCE
+#    define _GNU_SOURCE
+#endif
 
 #include "energy_plan_inputs.h"
 
