@@ -29,10 +29,6 @@ static unsigned int       g_latest_cache_year  = 0;
 static unsigned int       g_latest_cache_month = 0;
 static unsigned int       g_latest_cache_day   = 0;
 
-/* ============================================================================
- * Swedish Time Utilities
- * ========================================================================= */
-
 static int is_swedish_dst(const struct tm* utc) {
     int year = utc->tm_year + 1900;
 
@@ -102,17 +98,13 @@ static void get_latest_date(unsigned int* year, unsigned int* month,
 
     if (se.tm_hour >= 13) {
         se.tm_mday += 1;
-        mktime(&se); /* normalise overflow */
+        mktime(&se);
     }
 
     *year  = (unsigned int)(se.tm_year + 1900);
     *month = (unsigned int)(se.tm_mon + 1);
     *day   = (unsigned int)se.tm_mday;
 }
-
-/* ============================================================================
- * Cache Management
- * ========================================================================= */
 
 /*
  * Returns the appropriate cache instance for the requested date.
@@ -135,8 +127,8 @@ static FileCacheInstance* get_cache(unsigned int year, unsigned int month,
         (year == latest_year && month == latest_month && day == latest_day);
 
     if (is_latest) {
-        /* Invalidate if the "latest" date has rolled over since we last built
-         * the cache instance. */
+        // invalidate latest cache if date has advanced since last time we
+        // checked
         int date_changed =
             (g_latest_cache != NULL) && (g_latest_cache_year != latest_year ||
                                          g_latest_cache_month != latest_month ||
@@ -175,7 +167,6 @@ static FileCacheInstance* get_cache(unsigned int year, unsigned int month,
         return g_latest_cache;
     }
 
-    /* Historical — one long-lived singleton is fine; TTL never changes. */
     if (!g_historical_cache) {
         FileCacheConfig cfg = {.cache_dir   = HISTORICAL_CACHE_DIR,
                                .ttl_seconds = HISTORICAL_CACHE_TTL,
@@ -185,10 +176,6 @@ static FileCacheInstance* get_cache(unsigned int year, unsigned int month,
 
     return g_historical_cache;
 }
-
-/* ============================================================================
- * Query Parsing
- * ========================================================================= */
 
 typedef struct {
     unsigned int year;
@@ -247,7 +234,7 @@ static ParsedQuery parse_query(const char* query) {
         return result;
     }
 
-    /* No date supplied — use latest */
+    // use latest if date is missing
     if (result.year == 0) {
         get_latest_date(&result.year, &result.month, &result.day);
     }
@@ -255,10 +242,6 @@ static ParsedQuery parse_query(const char* query) {
     result.valid = 1;
     return result;
 }
-
-/* ============================================================================
- * Async HTTP Handling
- * ========================================================================= */
 
 typedef struct {
     HTTPServerConnection* conn;
@@ -303,10 +286,6 @@ static void on_http_response(const char* event, const char* response,
     free(ctx);
 }
 
-/* ============================================================================
- * Public API
- * ========================================================================= */
-
 int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
                                  const char*           query) {
     if (!conn) {
@@ -324,14 +303,12 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
 
     FileCacheInstance* cache = get_cache(parsed.year, parsed.month, parsed.day);
 
-    /* Build cache key */
     char key_input[128];
     snprintf(key_input, sizeof(key_input), "%04u-%02u-%02u-%s", parsed.year,
              parsed.month, parsed.day, parsed.price_group);
 
     char cache_key[FILE_CACHE_KEY_LENGTH] = {0};
 
-    /* Check cache */
     if (cache &&
         file_cache_generate_key(cache, key_input, cache_key,
                                 sizeof(cache_key)) == FILE_CACHE_OK &&
@@ -347,7 +324,6 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
         }
     }
 
-    /* Cache miss — fetch asynchronously */
     FetchContext* ctx = malloc(sizeof(FetchContext));
     if (!ctx) {
         send_json_message(conn, 500, "Memory allocation failed");
@@ -365,4 +341,76 @@ int elpris_api_fetch_and_respond(HTTPServerConnection* conn,
     LOG_DEBUG("ELPRIS", "Fetching: %s", url);
 
     return http_client_get(url, NULL, 30000, on_http_response, ctx);
+}
+
+/*
+ * Synchronous version of fetch.
+ * Returns the JSON response in *out_response (malloc'd, caller must free).
+ * Returns 0 on success, -1 on error.
+ */
+int elpris_api_fetch_sync(const char* query, char** out_response) {
+    if (!out_response) {
+        return -1;
+    }
+
+    *out_response = NULL;
+
+    ParsedQuery parsed = parse_query(query);
+    if (!parsed.valid) {
+        LOG_ERROR("ELPRIS", "Invalid query");
+        return -1;
+    }
+
+    FileCacheInstance* cache = get_cache(parsed.year, parsed.month, parsed.day);
+
+    // cache_key
+    char key_input[128];
+    snprintf(key_input, sizeof(key_input), "%04u-%02u-%02u-%s", parsed.year,
+             parsed.month, parsed.day, parsed.price_group);
+
+    char cache_key[FILE_CACHE_KEY_LENGTH] = {0};
+
+    if (cache &&
+        file_cache_generate_key(cache, key_input, cache_key,
+                                sizeof(cache_key)) == FILE_CACHE_OK &&
+        file_cache_is_valid(cache, cache_key)) {
+
+        char* cached = NULL;
+
+        if (file_cache_load(cache, cache_key, &cached, NULL) == FILE_CACHE_OK) {
+            LOG_DEBUG("ELPRIS", "Cache hit: %s", key_input);
+            *out_response = cached;
+            return 0;
+        }
+    }
+
+    char url[128];
+    snprintf(url, sizeof(url), BASE_URL "%04u/%02u-%02u_%s.json", parsed.year,
+             parsed.month, parsed.day, parsed.price_group);
+
+    LOG_DEBUG("ELPRIS", "Fetching (sync): %s", url);
+
+    int status = 0;
+
+    char* body = http_client_get_sync(url, NULL, 30000, &status);
+    if (!body) {
+        char error_msg[16];
+        snprintf(error_msg, sizeof(error_msg), "HTTP %d: %s\n", status, body);
+        LOG_ERROR("ELPRIS", "HTTP error: %s", error_msg);
+        return -1;
+    }
+
+    if (body[0] != '[' && body[0] != '{') {
+        LOG_ERROR("ELPRIS", "Invalid API response");
+        free(body);
+        return -1;
+    }
+
+    if (cache) {
+        file_cache_save(cache, cache_key, body, strlen(body));
+    }
+
+    *out_response = body;
+
+    return 0;
 }
