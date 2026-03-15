@@ -30,7 +30,7 @@ CFLAGS_STRICT := $(CFLAGS_BASE) -Wall -Wextra -MMD -MP
 
 # Loose flags for third-party libraries (also track deps so header changes propagate)
 CFLAGS_LOOSE   := -O2 -w -MMD -MP
-CXXFLAGS_LOOSE := -O2 -w -std=c++11 -MMD -MP
+CXXFLAGS_LOOSE := -O2 -w -std=c++11 -MMD -MP 
 
 INCLUDES := -I$(INC_DIR) \
             $(shell find $(SRC_DIR) -type d | sed 's/^/-I/') \
@@ -173,19 +173,33 @@ memcheck: build
 	@echo "Running Memcheck on $(BIN)..."
 	@$(MEMCHECK) ./$(TARGET) $(ARGS)
 
+GPROF_OUT ?= gprof.txt
+TIMEOUT   ?=
+
 .PHONY: profile
 profile:
-	@echo "Building compute with gprof instrumentation (-pg)..."
+	@echo "Building $(BIN) with gprof instrumentation (-pg)..."
 	$(MAKE) clean
-	$(MAKE) build BIN=compute CFLAGS_BASE="-O1 -g -pg" LDFLAGS="-pg"
-	@echo ""
-	@echo "Run:     ./build/debug/compute"
-	@echo "Analyze: gprof build/debug/compute gmon.out | less"
+	$(MAKE) build BIN=$(BIN) CFLAGS_BASE="-O1 -g -pg" LDFLAGS="-pg"
+	@echo "Running $(BIN)$(if $(TIMEOUT), (timeout $(TIMEOUT)s),)..."
+	@if [ -n "$(TIMEOUT)" ]; then \
+		timeout --signal=SIGTERM $(TIMEOUT) ./$(BUILD_DIR)/$(BIN) $(ARGS) || true; \
+	else \
+		./$(BUILD_DIR)/$(BIN) $(ARGS); \
+	fi
+	@echo "Analyzing..."
+	@gprof $(BUILD_DIR)/$(BIN) gmon.out > $(GPROF_OUT)
+	@echo "Report saved to $(GPROF_OUT)"
 
 .PHONY: callgrind
 callgrind: build
-	@echo "Running Callgrind on $(BIN)..."
-	@valgrind --tool=callgrind --callgrind-out-file=callgrind.out ./$(TARGET) $(ARGS)
+	@echo "Running Callgrind on $(BIN)$(if $(TIMEOUT), (timeout $(TIMEOUT)s),)..."
+	@if [ -n "$(TIMEOUT)" ]; then \
+		valgrind --tool=callgrind --callgrind-out-file=callgrind.out \
+		  timeout --signal=SIGTERM $(TIMEOUT) ./$(TARGET) $(ARGS) || true; \
+	else \
+		valgrind --tool=callgrind --callgrind-out-file=callgrind.out ./$(TARGET) $(ARGS); \
+	fi
 	@echo "Results saved to callgrind.out"
 	@echo "Visualize: kcachegrind callgrind.out  OR  callgrind_annotate callgrind.out"
 
