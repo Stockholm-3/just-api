@@ -173,6 +173,22 @@ memcheck: build
 	@echo "Running Memcheck on $(BIN)..."
 	@$(MEMCHECK) ./$(TARGET) $(ARGS)
 
+.PHONY: profile
+profile:
+	@echo "Building compute with gprof instrumentation (-pg)..."
+	$(MAKE) clean
+	$(MAKE) build BIN=compute CFLAGS_BASE="-O1 -g -pg" LDFLAGS="-pg"
+	@echo ""
+	@echo "Run:     ./build/debug/compute"
+	@echo "Analyze: gprof build/debug/compute gmon.out | less"
+
+.PHONY: callgrind
+callgrind: build
+	@echo "Running Callgrind on $(BIN)..."
+	@valgrind --tool=callgrind --callgrind-out-file=callgrind.out ./$(TARGET) $(ARGS)
+	@echo "Results saved to callgrind.out"
+	@echo "Visualize: kcachegrind callgrind.out  OR  callgrind_annotate callgrind.out"
+
 # ------------------------------------------------------------
 # Daemon management
 # ------------------------------------------------------------
@@ -283,7 +299,8 @@ lint:
 			--config-file=.clang-tidy \
 			--quiet \
 			--header-filter='^(src)/' \
-			--system-headers=false || true; \
+			--system-headers=false \
+			-- $(INCLUDES) || true; \
 	done
 	@echo "Lint complete (see warnings above)."
 
@@ -298,7 +315,8 @@ lint-fix:
 			--fix \
 			--fix-errors \
 			--header-filter='src/.*\.(h|hpp)$$' \
-			--system-headers=false || true; \
+			--system-headers=false \
+			-- $(INCLUDES) || true; \
 	done
 	@echo "Auto-fix complete. Please review changes with 'git diff'."
 
@@ -313,7 +331,8 @@ lint-ci:
 			--config-file=.clang-tidy \
 			--quiet \
 			--header-filter='^(src)/' \
-			--system-headers=false; then \
+			--system-headers=false \
+			-- $(INCLUDES); then \
 			touch /tmp/clang-tidy-failed; \
 		fi; \
 	done
