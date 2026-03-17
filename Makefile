@@ -325,10 +325,6 @@ lint-ci:
 		echo "✅ Lint passed"; \
 	fi
 
-.PHONY: install-lib
-install-lib:
-	git clone https://github.com/stockholm-3/lib.git ../lib
-
 #------------------------------------------------------------------------------
 # Docker for deployment
 #------------------------------------------------------------------------------
