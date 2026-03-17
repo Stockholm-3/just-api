@@ -18,7 +18,7 @@
 #define DEFAULT_LOG_DIR "./logs"
 #define DEFAULT_BASE_DIR "."
 #define EPOLL_TIMEOUT_MS 10
-#define EPOLL_MAX_EVENTS 1
+#define EPOLL_MAX_EVENTS 2
 static volatile sig_atomic_t g_shutdown_requested = 0;
 static void                  handle_shutdown_signal(int signum) {
     (void)signum;
@@ -96,7 +96,8 @@ int main(int argc, char* argv[]) {
     }
     LOG_INFO("MAIN", "Thread pool created (%d workers, max_pending=%d)",
              config.thread_pool.num_workers, config.thread_pool.max_pending);
-    smw_create_task(pool, thread_pool_smw_callback);
+    /* thread_pool completions are driven by the self-pipe registered with
+     * epoll below — no SMW polling task needed. */
     WeatherServer server;
     weather_server_initiate(&server, pool);
     LOG_INFO("MAIN", "Server started on port 10680 (PID %d)", getpid());
@@ -117,9 +118,24 @@ int main(int argc, char* argv[]) {
     ev.data.fd            = server.httpServer.tcpServer.listen_fd;
     epoll_ctl(epfd, EPOLL_CTL_ADD, server.httpServer.tcpServer.listen_fd, &ev);
 
+    int                notify_fd = thread_pool_get_notify_fd(pool);
+    struct epoll_event notify_ev = {0};
+    notify_ev.events             = EPOLLIN | EPOLLET;
+    notify_ev.data.fd            = notify_fd;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, notify_fd, &notify_ev);
+
     struct epoll_event events[EPOLL_MAX_EVENTS];
     while (!g_shutdown_requested) {
-        epoll_wait(epfd, events, EPOLL_MAX_EVENTS, EPOLL_TIMEOUT_MS);
+        int nfds = epoll_wait(epfd, events, EPOLL_MAX_EVENTS, EPOLL_TIMEOUT_MS);
+        for (int i = 0; i < nfds; i++) {
+            if (events[i].data.fd == notify_fd) {
+                /* Drain the pipe, then dispatch all pending done callbacks */
+                char buf[64];
+                while (read(notify_fd, buf, sizeof(buf)) > 0) {
+                }
+                thread_pool_process_completions(pool);
+            }
+        }
         smw_work(system_monotonic_ms());
     }
 

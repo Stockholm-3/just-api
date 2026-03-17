@@ -2,6 +2,10 @@
 #
 # test_endpoints.sh - Test all HTTP endpoints
 #
+# Usage: ./test_endpoints.sh [--local] [--url=http://host:port]
+#   --local          skip build and server start; test an already-running server
+#   --url=<url>      override base URL (default: http://localhost:10680)
+#
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BASE_URL="http://localhost:10680"
@@ -10,43 +14,59 @@ PASSED=0
 FAILED=0
 PASSED_LIST=""
 FAILED_LIST=""
+LOCAL=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --local)   LOCAL=1 ;;
+        --url=*)   BASE_URL="${arg#--url=}" ;;
+    esac
+done
 
 cleanup() {
-    if [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    if [ $LOCAL -eq 0 ] && [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
         kill "$SERVER_PID" 2>/dev/null
         wait "$SERVER_PID" 2>/dev/null
     fi
 }
 trap cleanup EXIT
 
-# Build and start server
 cd "$PROJECT_DIR"
-echo "Building..."
-make all -j"$(nproc)" > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-    echo "FAIL: Build failed"
-    exit 1
-fi
 
-echo "Starting server..."
-./build/debug/server &
-SERVER_PID=$!
-
-# Wait for server to be ready
-for i in $(seq 1 30); do
-    if curl -s -o /dev/null "$BASE_URL/health" 2>/dev/null; then
-        break
-    fi
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "FAIL: Server crashed on startup"
+if [ $LOCAL -eq 0 ]; then
+    echo "Building..."
+    make all -j"$(nproc)" > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "FAIL: Build failed"
         exit 1
     fi
-    sleep 0.2
-done
 
-if ! curl -s -o /dev/null "$BASE_URL/health" 2>/dev/null; then
-    echo "FAIL: Server did not start within 6 seconds"
-    exit 1
+    echo "Starting server..."
+    ./build/debug/server &
+    SERVER_PID=$!
+
+    # Wait for server to be ready
+    for i in $(seq 1 30); do
+        if curl -s -o /dev/null "$BASE_URL/health" 2>/dev/null; then
+            break
+        fi
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            echo "FAIL: Server crashed on startup"
+            exit 1
+        fi
+        sleep 0.2
+    done
+
+    if ! curl -s -o /dev/null "$BASE_URL/health" 2>/dev/null; then
+        echo "FAIL: Server did not start within 6 seconds"
+        exit 1
+    fi
+else
+    echo "Local mode — using running server at $BASE_URL"
+    if ! curl -s -o /dev/null "$BASE_URL/health" 2>/dev/null; then
+        echo "FAIL: No server reachable at $BASE_URL"
+        exit 1
+    fi
 fi
 
 echo ""
@@ -157,6 +177,11 @@ test_endpoint "GET" "/v1/get_plan?city=Nonexistent9999&price=SE3"  400 ""
 
 # /v1/get_plan — happy path (200 if data ready, 202 if newly registered)
 test_endpoint_2xx "GET" "/v1/get_plan?city=Stockholm&price=SE3" ""
+test_endpoint_2xx "GET" "/v1/get_plan?city=Göteborg&price=SE3" ""
+test_endpoint_2xx "GET" "/v1/get_plan?city=Malmö&price=SE4" ""
+test_endpoint_2xx "GET" "/v1/get_plan?city=Sundsvall&price=SE2" ""
+test_endpoint_2xx "GET" "/v1/get_plan?city=Lulea&price=SE1" ""
+test_endpoint_2xx "GET" "/v1/get_plan?city=Uppsala&price=SE3" ""
 
 echo "========================="
 echo ""
