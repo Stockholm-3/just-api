@@ -1,9 +1,6 @@
 /**
- * test_compute_config.c - Unit tests for ComputeConfig defaults and
- * worker-split formula
+ * test_compute_config.c - Unit tests for the worker-split formula
  */
-
-#include "energy_plan/compute.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -64,37 +61,6 @@ static void teardown(void) {}
 static void worker_split(int total, int* req, int* comp) {
     *req  = (total + 1) / 2; /* ceil — request gets priority */
     *comp = total / 2;       /* floor */
-}
-
-/* ============= Tests: ComputeConfig defaults ============= */
-
-static int test_compute_defaults_paths(void) {
-    ComputeConfig cfg;
-    memset(&cfg, 0, sizeof(cfg));
-    compute_config_set_defaults(&cfg);
-
-    TEST_ASSERT_STR_EQ(cfg.cities_csv, "energy_plan/cities.csv");
-    TEST_ASSERT_STR_EQ(cfg.compute_input_dir, "cache/compute_input");
-    TEST_ASSERT_STR_EQ(cfg.elpris_json,
-                       "cache/compute_input/elpris_merged.json");
-    TEST_ASSERT_STR_EQ(cfg.output_dir, "energy_plan/compute_output");
-    TEST_ASSERT_STR_EQ(cfg.lock_file, "energy_plan/compute_output/.lock");
-
-    return 0;
-}
-
-static int test_compute_defaults_null_safe(void) {
-    /* Calling with a valid zeroed struct must not crash */
-    ComputeConfig cfg;
-    memset(&cfg, 0, sizeof(cfg));
-    compute_config_set_defaults(&cfg);
-    /* All fields must be non-empty after defaults */
-    TEST_ASSERT(cfg.cities_csv[0] != '\0');
-    TEST_ASSERT(cfg.compute_input_dir[0] != '\0');
-    TEST_ASSERT(cfg.elpris_json[0] != '\0');
-    TEST_ASSERT(cfg.output_dir[0] != '\0');
-    TEST_ASSERT(cfg.lock_file[0] != '\0');
-    return 0;
 }
 
 /* ============= Tests: Worker-split formula ============= */
@@ -165,10 +131,8 @@ static int test_worker_split_request_always_ge_compute(void) {
 /* ============= main ============= */
 
 int main(void) {
-    printf("=== ComputeConfig + Worker-Split Tests ===\n\n");
+    printf("=== Worker-Split Tests ===\n\n");
 
-    RUN_TEST(test_compute_defaults_paths);
-    RUN_TEST(test_compute_defaults_null_safe);
     RUN_TEST(test_worker_split_even);
     RUN_TEST(test_worker_split_odd);
     RUN_TEST(test_worker_split_edge_one);

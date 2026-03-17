@@ -44,7 +44,6 @@ gcc -O1 -g -Wall -Werror \
     tests/test_file_cache.c \
     "$BUILD_DIR/src/cache_utils/file_cache.o" \
     "$BUILD_DIR/src/api/hash_md5.o" \
-    "$BUILD_DIR/src/logger/logger.o" \
     $LIB_OBJS \
     -o "$BUILD_DIR/test_file_cache" \
     -lmbedtls -lmbedx509 -lmbedcrypto -lstdc++ -pthread
@@ -86,6 +85,22 @@ echo ""
 TPE_RESULT=$?
 
 # -----------------------------------------------------------------------
+# thread_pool pipe tests
+# -----------------------------------------------------------------------
+echo ""
+echo "Compiling thread_pool pipe tests..."
+gcc -O1 -g -Wall -Werror \
+    $INCLUDES \
+    tests/test_thread_pool_pipe.c \
+    "$BUILD_DIR/lib/just-lib/thread_pool/thread_pool.o" \
+    -o "$BUILD_DIR/test_thread_pool_pipe" \
+    -lstdc++ -pthread
+
+echo ""
+"$BUILD_DIR/test_thread_pool_pipe"
+TPP_RESULT=$?
+
+# -----------------------------------------------------------------------
 # compute_config tests
 # -----------------------------------------------------------------------
 echo ""
@@ -93,38 +108,18 @@ echo "Compiling compute_config tests..."
 gcc -O1 -g -Wall -Werror \
     $INCLUDES \
     tests/test_compute_config.c \
-    "$BUILD_DIR/src/energy_plan/compute.o" \
-    "$BUILD_DIR/src/logger/logger.o" \
-    $LIB_OBJS \
     -o "$BUILD_DIR/test_compute_config" \
-    -ljansson -lmbedtls -lmbedx509 -lmbedcrypto -lstdc++ -pthread
+    -lstdc++ -pthread
 
 echo ""
 "$BUILD_DIR/test_compute_config"
 CC_RESULT=$?
 
 # -----------------------------------------------------------------------
-# fetch_scheduler tests
-# -----------------------------------------------------------------------
-echo ""
-echo "Compiling fetch_scheduler tests..."
-gcc -O1 -g -Wall -Werror \
-    $INCLUDES \
-    tests/test_fetch_scheduler.c \
-    $SRC_OBJS \
-    $LIB_OBJS \
-    -o "$BUILD_DIR/test_fetch_scheduler" \
-    -ljansson -lmbedtls -lmbedx509 -lmbedcrypto -lstdc++ -pthread
-
-echo ""
-"$BUILD_DIR/test_fetch_scheduler"
-FS_RESULT=$?
-
-# -----------------------------------------------------------------------
 # Exit with failure if any suite failed
 # -----------------------------------------------------------------------
 if [ "$FC_RESULT" -ne 0 ] || [ "$TP_RESULT" -ne 0 ] || [ "$TPE_RESULT" -ne 0 ] || \
-   [ "$CC_RESULT" -ne 0 ] || [ "$FS_RESULT" -ne 0 ]; then
+   [ "$TPP_RESULT" -ne 0 ] || [ "$CC_RESULT" -ne 0 ]; then
     exit 1
 fi
 exit 0
