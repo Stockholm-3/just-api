@@ -32,6 +32,10 @@ typedef struct {
         int  max_backoff_ms;
         int  server_ready_wait_ms;
         int  monitor_poll_us;
+        int  health_check_interval_ms;
+        int  health_check_timeout_ms;
+        int  health_check_failures;
+        int  sigkill_timeout_ms;
     } watchdog;
 
     /* Thread pool */

@@ -19,4 +19,9 @@ void process_wait_for_server(const char* host, int port, int max_wait_ms);
 // Returns -1 if it exited cleanly (status 0) or is no longer a child.
 int process_monitor(pid_t pid);
 
+// Sends GET /health to host:port and waits up to timeout_ms for a response.
+// Returns  0 if the server replied with HTTP 200.
+// Returns -1 on timeout, connection error, or any non-200 status code.
+int process_health_check(const char* host, int port, int timeout_ms);
+
 #endif // PROCESS_H
