@@ -23,12 +23,16 @@ void config_set_defaults(ServerConfig* config) {
 
     strncpy(config->watchdog.pid_file, "tmp/jws-watchdog.pid",
             sizeof(config->watchdog.pid_file) - 1);
-    config->watchdog.max_restarts         = 10;
-    config->watchdog.restart_window_sec   = 60;
-    config->watchdog.initial_backoff_ms   = 1000;
-    config->watchdog.max_backoff_ms       = 30000;
-    config->watchdog.server_ready_wait_ms = 10000;
-    config->watchdog.monitor_poll_us      = 100000; // 100 ms
+    config->watchdog.max_restarts             = 10;
+    config->watchdog.restart_window_sec       = 60;
+    config->watchdog.initial_backoff_ms       = 1000;
+    config->watchdog.max_backoff_ms           = 30000;
+    config->watchdog.server_ready_wait_ms     = 10000;
+    config->watchdog.monitor_poll_us          = 100000; // 100 ms
+    config->watchdog.health_check_interval_ms = 5000;
+    config->watchdog.health_check_timeout_ms  = 2000;
+    config->watchdog.health_check_failures    = 3;
+    config->watchdog.sigkill_timeout_ms       = 5000;
 
     config->thread_pool.num_workers = 4;
     config->thread_pool.max_pending = 256;
@@ -154,6 +158,14 @@ int config_parser_load(const char* filepath, ServerConfig* config) {
                 json_object_get(w, "server_ready_wait_ms"));
         INT_SET(config->watchdog.monitor_poll_us,
                 json_object_get(w, "monitor_poll_us"));
+        INT_SET(config->watchdog.health_check_interval_ms,
+                json_object_get(w, "health_check_interval_ms"));
+        INT_SET(config->watchdog.health_check_timeout_ms,
+                json_object_get(w, "health_check_timeout_ms"));
+        INT_SET(config->watchdog.health_check_failures,
+                json_object_get(w, "health_check_failures"));
+        INT_SET(config->watchdog.sigkill_timeout_ms,
+                json_object_get(w, "sigkill_timeout_ms"));
     }
 
     json_t* tp = json_object_get(root, "thread_pool");
@@ -297,7 +309,16 @@ void config_parser_print(const ServerConfig* config) {
     printf("  max_backoff_ms:        %d\n", config->watchdog.max_backoff_ms);
     printf("  server_ready_wait_ms:  %d\n",
            config->watchdog.server_ready_wait_ms);
-    printf("  monitor_poll_us:       %d\n", config->watchdog.monitor_poll_us);
+    printf("  monitor_poll_us:           %d\n",
+           config->watchdog.monitor_poll_us);
+    printf("  health_check_interval_ms:  %d\n",
+           config->watchdog.health_check_interval_ms);
+    printf("  health_check_timeout_ms:   %d\n",
+           config->watchdog.health_check_timeout_ms);
+    printf("  health_check_failures:     %d\n",
+           config->watchdog.health_check_failures);
+    printf("  sigkill_timeout_ms:        %d\n",
+           config->watchdog.sigkill_timeout_ms);
 
     printf("Thread pool:\n");
     printf("  num_workers: %d\n", config->thread_pool.num_workers);

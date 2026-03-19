@@ -8,8 +8,11 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <stdio.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -68,6 +71,99 @@ void process_wait_for_server(const char* host, int port, int max_wait_ms) {
 
     LOG_WARN("PROCESS", "Server not ready after %dms, proceeding anyway",
              max_wait_ms);
+}
+
+int process_health_check(const char* host, int port, int timeout_ms) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+
+    /* Non-blocking connect so we can enforce timeout_ms on the connect itself
+     */
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons((uint16_t)port);
+    inet_pton(AF_INET, host, &addr.sin_addr);
+
+    int rc = connect(fd, (struct sockaddr*)&addr, sizeof(addr));
+    if (rc < 0 && errno != EINPROGRESS) {
+        close(fd);
+        return -1;
+    }
+
+    if (rc != 0) {
+        /* Wait for connect to complete */
+        fd_set wfds;
+        FD_ZERO(&wfds);
+        FD_SET(fd, &wfds);
+        struct timeval tv = {
+            .tv_sec  = timeout_ms / 1000,
+            .tv_usec = (timeout_ms % 1000) * 1000,
+        };
+        int sel = select(fd + 1, NULL, &wfds, NULL, &tv);
+        if (sel <= 0) {
+            close(fd);
+            return -1; /* timeout or select error */
+        }
+        /* Check whether connect actually succeeded */
+        int       err = 0;
+        socklen_t len = sizeof(err);
+        getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
+        if (err != 0) {
+            close(fd);
+            return -1;
+        }
+    }
+
+    /* Restore blocking mode and set send/recv timeouts for data phase */
+    fcntl(fd, F_SETFL, flags);
+    struct timeval tv = {
+        .tv_sec  = timeout_ms / 1000,
+        .tv_usec = (timeout_ms % 1000) * 1000,
+    };
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    /* Send minimal HTTP/1.0 request (server closes conn after response) */
+    char req[128];
+    int  req_len = snprintf(req, sizeof(req),
+                            "GET /health HTTP/1.0\r\nHost: %s\r\n\r\n", host);
+    if (write(fd, req, (size_t)req_len) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    /* Read the status line byte-by-byte until \n */
+    char line[64];
+    int  i = 0;
+    while (i < (int)sizeof(line) - 1) {
+        char    c;
+        ssize_t n = read(fd, &c, 1);
+        if (n <= 0) {
+            break;
+        }
+        if (c == '\r') {
+            continue;
+        }
+        if (c == '\n') {
+            break;
+        }
+        line[i++] = c;
+    }
+    line[i] = '\0';
+    close(fd);
+
+    int status_code = 0;
+    if (sscanf(line, "HTTP/1.%*d %d", &status_code) != 1) {
+        return -1;
+    }
+
+    return (status_code == 200) ? 0 : -1;
 }
 
 int process_monitor(pid_t pid) {

@@ -335,6 +335,10 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO("WATCHDOG", "Entering main loop");
 
+    struct timespec hc_last_ts    = {0, 0};
+    int             hc_fail_count = 0;
+    struct timespec sigterm_ts    = {0, 0};
+
     while (!g_shutdown) {
         if (g_server_pid <= 0) {
             g_server_pid = process_spawn_server(args.server_path, abs_log_dir,
@@ -343,6 +347,25 @@ int main(int argc, char* argv[]) {
                 process_wait_for_server(cfg.scheduler.service_host,
                                         cfg.server_port,
                                         cfg.watchdog.server_ready_wait_ms);
+                clock_gettime(CLOCK_MONOTONIC, &hc_last_ts);
+                hc_fail_count = 0;
+                sigterm_ts    = (struct timespec){0, 0};
+            }
+        }
+
+        /* SIGKILL fallback: if server did not exit after SIGTERM */
+        if (sigterm_ts.tv_sec != 0 && g_server_pid > 0) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            long elapsed_ms = (now.tv_sec - sigterm_ts.tv_sec) * 1000L +
+                              (now.tv_nsec - sigterm_ts.tv_nsec) / 1000000L;
+            if (elapsed_ms >= cfg.watchdog.sigkill_timeout_ms) {
+                LOG_WARN("WATCHDOG",
+                         "Server did not exit after SIGTERM (%ldms) – "
+                         "sending SIGKILL",
+                         elapsed_ms);
+                kill(-g_server_pid, SIGKILL);
+                sigterm_ts = (struct timespec){0, 0};
             }
         }
 
@@ -363,6 +386,36 @@ int main(int argc, char* argv[]) {
             }
 
             restart_policy_apply_backoff(&rp_state, &rp_cfg);
+        } else if (g_server_pid > 0 &&
+                   cfg.watchdog.health_check_interval_ms > 0 &&
+                   sigterm_ts.tv_sec == 0) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            long elapsed_ms = (now.tv_sec - hc_last_ts.tv_sec) * 1000L +
+                              (now.tv_nsec - hc_last_ts.tv_nsec) / 1000000L;
+
+            if (hc_last_ts.tv_sec == 0 ||
+                elapsed_ms >= cfg.watchdog.health_check_interval_ms) {
+                hc_last_ts = now;
+                int hc     = process_health_check(
+                    cfg.scheduler.service_host, cfg.server_port,
+                    cfg.watchdog.health_check_timeout_ms);
+                if (hc == 0) {
+                    hc_fail_count = 0;
+                } else {
+                    hc_fail_count++;
+                    LOG_WARN("WATCHDOG", "Health check failed (%d/%d)",
+                             hc_fail_count, cfg.watchdog.health_check_failures);
+
+                    if (hc_fail_count >= cfg.watchdog.health_check_failures) {
+                        LOG_WARN("WATCHDOG",
+                                 "Server unresponsive – sending SIGTERM");
+                        kill(-g_server_pid, SIGTERM);
+                        clock_gettime(CLOCK_MONOTONIC, &sigterm_ts);
+                        hc_fail_count = 0;
+                    }
+                }
+            }
         }
 
         usleep((useconds_t)cfg.watchdog.monitor_poll_us);
@@ -373,8 +426,29 @@ int main(int argc, char* argv[]) {
         LOG_INFO("WATCHDOG", "Sending SIGTERM to server process group %d",
                  g_server_pid);
         kill(-g_server_pid, SIGTERM);
+
+        /* Poll with WNOHANG; send SIGKILL if server does not exit in time. */
+        struct timespec stop_start, stop_now;
+        clock_gettime(CLOCK_MONOTONIC, &stop_start);
         int wstatus;
-        waitpid(g_server_pid, &wstatus, 0);
+        for (;;) {
+            if (waitpid(g_server_pid, &wstatus, WNOHANG) != 0)
+                break;
+            clock_gettime(CLOCK_MONOTONIC, &stop_now);
+            long elapsed_ms =
+                (stop_now.tv_sec - stop_start.tv_sec) * 1000L +
+                (stop_now.tv_nsec - stop_start.tv_nsec) / 1000000L;
+            if (elapsed_ms >= cfg.watchdog.sigkill_timeout_ms) {
+                LOG_WARN("WATCHDOG",
+                         "Server did not exit after SIGTERM (%ldms) – "
+                         "sending SIGKILL",
+                         elapsed_ms);
+                kill(-g_server_pid, SIGKILL);
+                waitpid(g_server_pid, &wstatus, 0);
+                break;
+            }
+            usleep(50 * 1000); /* 50 ms poll */
+        }
         g_server_pid = -1;
     }
 

@@ -116,10 +116,62 @@ echo ""
 CC_RESULT=$?
 
 # -----------------------------------------------------------------------
+# process_health_check tests
+# -----------------------------------------------------------------------
+echo ""
+echo "Compiling process_health_check tests..."
+gcc -O1 -g -Wall -Werror \
+    $INCLUDES \
+    tests/test_process_health_check.c \
+    "$BUILD_DIR/src/watchdog/process.o" \
+    "$BUILD_DIR/lib/just-lib/logger/logger/logger.o" \
+    -o "$BUILD_DIR/test_process_health_check" \
+    -lstdc++ -pthread
+
+echo ""
+"$BUILD_DIR/test_process_health_check"
+PHC_RESULT=$?
+
+# -----------------------------------------------------------------------
+# watchdog_config tests
+# -----------------------------------------------------------------------
+echo ""
+echo "Compiling watchdog_config tests..."
+gcc -O1 -g -Wall -Werror \
+    $INCLUDES \
+    tests/test_watchdog_config.c \
+    $LIB_OBJS \
+    "$BUILD_DIR/src/config/config_parser.o" \
+    -o "$BUILD_DIR/test_watchdog_config" \
+    -lmbedtls -lmbedx509 -lmbedcrypto -lstdc++ -pthread
+
+echo ""
+"$BUILD_DIR/test_watchdog_config"
+WCF_RESULT=$?
+
+# -----------------------------------------------------------------------
+# instance_dispose tests
+# -----------------------------------------------------------------------
+echo ""
+echo "Compiling instance_dispose tests..."
+gcc -O1 -g -Wall -Werror \
+    $INCLUDES \
+    tests/test_instance_dispose.c \
+    $LIB_OBJS \
+    $SRC_OBJS \
+    -o "$BUILD_DIR/test_instance_dispose" \
+    -lmbedtls -lmbedx509 -lmbedcrypto -lstdc++ -pthread
+
+echo ""
+"$BUILD_DIR/test_instance_dispose"
+IDD_RESULT=$?
+
+# -----------------------------------------------------------------------
 # Exit with failure if any suite failed
 # -----------------------------------------------------------------------
 if [ "$FC_RESULT" -ne 0 ] || [ "$TP_RESULT" -ne 0 ] || [ "$TPE_RESULT" -ne 0 ] || \
-   [ "$TPP_RESULT" -ne 0 ] || [ "$CC_RESULT" -ne 0 ]; then
+   [ "$TPP_RESULT" -ne 0 ] || [ "$CC_RESULT" -ne 0 ] || \
+   [ "$PHC_RESULT" -ne 0 ] || [ "$WCF_RESULT" -ne 0 ] || [ "$IDD_RESULT" -ne 0 ]; then
     exit 1
 fi
 exit 0

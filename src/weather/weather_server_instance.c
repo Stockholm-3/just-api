@@ -125,7 +125,7 @@ void weather_server_instance_work(WeatherServerInstance* instance,
  * @param[in] instance Instance to dispose.
  */
 void weather_server_instance_dispose(WeatherServerInstance* instance) {
-    /* Reserved for future cleanup logic */
+    http_server_connection_dispose_ptr(&instance->connection);
 }
 
 /**

@@ -10,6 +10,7 @@
 
 #include "weather_server.h"
 
+#include "utils.h"
 #include "weather_server_instance.h"
 
 #include <stdio.h>
