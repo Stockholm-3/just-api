@@ -19,23 +19,10 @@ C server providing an energy plan for households with solar panels and battery
 
 ## Installation
 
-1. Clone the repository:
+1. Clone the repository with submodules:
 ```bash
-git clone https://github.com/stockholm-3/just-api.git
+git clone --recurse-submodules https://github.com/stockholm-3/just-api.git
 cd just-api
-```
-
-2. Ensure the lib branch is cloned into ../lib:
-
-To clone the jansson library from project root run:
-```bash
-make install-lib
-```
-This will create a lib folder outside of the root with all library source files.
-
-The project uses a symlink to access our library and external libs like jansson. The symlink should point to:
-```bash
-lib/ -> ../lib/
 ```
 
 3. Run the daemon(this starts the server and handles fetching for the energy plan):
@@ -50,6 +37,11 @@ make daemon-stop
 ## API Docs
 
 see [api_docs.md](docs/api/api_docs.md) for API documentation
+
+## Deployment
+
+see https://github.com/Stockholm-3/just-api-deployment
+
 
 ## Authors
 
