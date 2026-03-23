@@ -26,6 +26,11 @@ C server providing an energy plan for households with solar panels and battery
 git clone --recurse-submodules https://github.com/stockholm-3/just-api.git
 cd just-api
 ```
+2. Install dependencies:
+mbedtls
+```bash
+sudo apt -y install libmbedtls-dev
+```
 
 3. Run the daemon(this starts the server and handles fetching for the energy plan):
 ```bash
