@@ -17,7 +17,7 @@ C server providing an energy plan for households with solar panels and battery
 
 ---
 
-## Installation
+## Development
 
 1. Clone the repository with submodules:
 ```bash
