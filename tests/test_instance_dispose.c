@@ -7,9 +7,9 @@
  *   - queues a 503 response when state is WAIT_RESPONSE
  */
 
+#include "api/api_server_instance.h"
 #include "http/http_server/http_server_connection.h"
 #include "utils/smw.h"
-#include "weather/weather_server_instance.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -53,71 +53,71 @@ static int g_tests_failed = 0;
  * Initialised to -1 so teardown() can guard close() safely even when
  * setup_connection() was never called (e.g. in test_dispose_null_connection).
  */
-static int                  sv[2] = {-1, -1};
-static HTTPServerConnection conn;
+static int                  g_sv[2] = {-1, -1};
+static HTTPServerConnection g_conn;
 
 static void setup_connection(void) {
-    socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
-    http_server_connection_initiate(&conn, sv[0]);
+    socketpair(AF_UNIX, SOCK_STREAM, 0, g_sv);
+    http_server_connection_initiate(&g_conn, g_sv[0]);
 }
 
 static void teardown(void) {
     /* http_server_connection_dispose has a guard: if !conn.task it's a noop */
-    http_server_connection_dispose(&conn);
-    if (sv[1] >= 0) {
-        close(sv[1]);
-        sv[1] = -1;
+    http_server_connection_dispose(&g_conn);
+    if (g_sv[1] >= 0) {
+        close(g_sv[1]);
+        g_sv[1] = -1;
     }
-    sv[0] = -1; /* fd already closed by http_server_connection_dispose */
-    memset(&conn, 0, sizeof(conn));
+    g_sv[0] = -1; /* fd already closed by http_server_connection_dispose */
+    memset(&g_conn, 0, sizeof(g_conn));
 }
 
 /* ============= Tests ============= */
 
 static int test_dispose_null_connection(void) {
     /* dispose() must not crash when connection pointer is NULL */
-    WeatherServerInstance inst;
+    ApiServerInstance inst;
     memset(&inst, 0, sizeof(inst));
     inst.connection = NULL;
 
-    weather_server_instance_dispose(&inst); /* must not crash */
+    api_server_instance_dispose(&inst); /* must not crash */
     return 0;
 }
 
 static int test_dispose_state_receive_headers(void) {
     setup_connection();
-    conn.state = HTTP_SERVER_CONNECTION_STATE_RECEIVE_HEADERS;
+    g_conn.state = HTTP_SERVER_CONNECTION_STATE_RECEIVE_HEADERS;
 
-    WeatherServerInstance inst = {.connection = &conn};
-    weather_server_instance_dispose(&inst);
+    ApiServerInstance inst = {.connection = &g_conn};
+    api_server_instance_dispose(&inst);
 
     /* No response should have been queued */
-    TEST_ASSERT(conn.write_buffer == NULL);
+    TEST_ASSERT(g_conn.write_buffer == NULL);
     return 0;
 }
 
 static int test_dispose_state_send(void) {
     setup_connection();
-    conn.state = HTTP_SERVER_CONNECTION_STATE_SEND;
+    g_conn.state = HTTP_SERVER_CONNECTION_STATE_SEND;
 
-    WeatherServerInstance inst = {.connection = &conn};
-    weather_server_instance_dispose(&inst);
+    ApiServerInstance inst = {.connection = &g_conn};
+    api_server_instance_dispose(&inst);
 
-    TEST_ASSERT(conn.write_buffer == NULL);
+    TEST_ASSERT(g_conn.write_buffer == NULL);
     return 0;
 }
 
 static int test_dispose_state_wait_response_sends_503(void) {
     setup_connection();
-    conn.state = HTTP_SERVER_CONNECTION_STATE_WAIT_RESPONSE;
+    g_conn.state = HTTP_SERVER_CONNECTION_STATE_WAIT_RESPONSE;
 
-    WeatherServerInstance inst = {.connection = &conn};
-    weather_server_instance_dispose(&inst);
+    ApiServerInstance inst = {.connection = &g_conn};
+    api_server_instance_dispose(&inst);
 
     /* A 503 response must have been buffered */
-    TEST_ASSERT(conn.write_buffer != NULL);
-    TEST_ASSERT(strstr((char*)conn.write_buffer, "503") != NULL);
-    TEST_ASSERT(strstr((char*)conn.write_buffer, "Retry-After") != NULL);
+    TEST_ASSERT(g_conn.write_buffer != NULL);
+    TEST_ASSERT(strstr((char*)g_conn.write_buffer, "503") != NULL);
+    TEST_ASSERT(strstr((char*)g_conn.write_buffer, "Retry-After") != NULL);
     return 0;
 }
 

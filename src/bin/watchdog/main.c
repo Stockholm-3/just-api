@@ -50,10 +50,6 @@
 // Timeout used when joining the scheduler thread on shutdown (seconds).
 #define SCHED_JOIN_TIMEOUT_SEC 10
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 typedef struct {
     const char* server_path;
     const char* compute_path;
@@ -62,17 +58,8 @@ typedef struct {
     int         foreground;
 } WatchdogArgs;
 
-// ---------------------------------------------------------------------------
-// Global shutdown flag – written only by the signal handler in daemon.c,
-// read by the main loop and the scheduler thread.
-// ---------------------------------------------------------------------------
-
 static volatile sig_atomic_t g_shutdown   = 0;
 static pid_t                 g_server_pid = -1;
-
-// ---------------------------------------------------------------------------
-// Scheduler helpers
-// ---------------------------------------------------------------------------
 
 // Joins the scheduler thread with a deadline.  Returns 0 on clean join,
 // -1 if the thread did not finish within SCHED_JOIN_TIMEOUT_SEC.
@@ -91,10 +78,6 @@ static int join_scheduler(pthread_t thread) {
     }
     return 0;
 }
-
-// ---------------------------------------------------------------------------
-// CLI
-// ---------------------------------------------------------------------------
 
 static void print_usage(const char* prog) {
     printf("Usage: %s [OPTIONS]\n\n"
@@ -144,10 +127,6 @@ static void parse_args(int argc, char* argv[], WatchdogArgs* args) {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Path helpers
-// ---------------------------------------------------------------------------
 
 // Resolves `path` to an absolute path in `out` (size PATH_MAX).
 // Creates the directory first if `create_if_missing` is set.
@@ -432,8 +411,9 @@ int main(int argc, char* argv[]) {
         clock_gettime(CLOCK_MONOTONIC, &stop_start);
         int wstatus;
         for (;;) {
-            if (waitpid(g_server_pid, &wstatus, WNOHANG) != 0)
+            if (waitpid(g_server_pid, &wstatus, WNOHANG) != 0) {
                 break;
+            }
             clock_gettime(CLOCK_MONOTONIC, &stop_now);
             long elapsed_ms =
                 (stop_now.tv_sec - stop_start.tv_sec) * 1000L +

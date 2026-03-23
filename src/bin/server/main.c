@@ -1,10 +1,10 @@
+#include "api_server.h"
 #include "config/config_parser.h"
 #include "energy_plan/energy_plan_store.h"
 #include "logger/logger.h"
 #include "smw.h"
 #include "thread_pool.h"
 #include "utils.h"
-#include "weather_server.h"
 
 #include <getopt.h>
 #include <pthread.h>
@@ -96,16 +96,16 @@ int main(int argc, char* argv[]) {
     }
     LOG_INFO("MAIN", "Thread pool created (%d workers, max_pending=%d)",
              config.thread_pool.num_workers, config.thread_pool.max_pending);
-    /* thread_pool completions are driven by the self-pipe registered with
-     * epoll below — no SMW polling task needed. */
-    WeatherServer server;
-    weather_server_initiate(&server, pool);
+    // thread_pool completions are driven by the self-pipe registered with
+    // epoll below — no SMW polling task needed.
+    ApiServer server;
+    api_server_initiate(&server, pool);
     LOG_INFO("MAIN", "Server started on port 10680 (PID %d)", getpid());
 
     int epfd = epoll_create1(EPOLL_CLOEXEC);
     if (epfd < 0) {
         LOG_ERROR("MAIN", "epoll_create1 failed");
-        weather_server_dispose(&server);
+        api_server_dispose(&server);
         thread_pool_destroy(pool);
         energy_plan_store_shutdown();
         smw_dispose();
@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
         int nfds = epoll_wait(epfd, events, EPOLL_MAX_EVENTS, EPOLL_TIMEOUT_MS);
         for (int i = 0; i < nfds; i++) {
             if (events[i].data.fd == notify_fd) {
-                /* Drain the pipe, then dispatch all pending done callbacks */
+                // Drain the pipe, then dispatch all pending done callbacks
                 char buf[64];
                 while (read(notify_fd, buf, sizeof(buf)) > 0) {
                 }
@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
 
     close(epfd);
     LOG_INFO("MAIN", "Shutdown signal received, cleaning up...");
-    weather_server_dispose(&server);
+    api_server_dispose(&server);
     thread_pool_wait_idle(pool);
     thread_pool_process_completions(pool);
     thread_pool_destroy(pool);
