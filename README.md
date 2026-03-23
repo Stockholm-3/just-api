@@ -9,7 +9,9 @@ C server providing an energy plan for households with solar panels and battery
 
 ## Related repos
 [stockholm-3-lib](https://github.com/Stockholm-3/lib) - Library used for all Stockholm-3 projects. Includes external libraries like Jansson for compiling from source.
+
 [stockholm-3-just-client](https://github.com/Stockholm-3/just-client) - Simple client for connecting to the Just API and displaying the energy plan and weather data.
+
 ## Features
 
 - **24 hour enegy plan** - to optimise energy usage
