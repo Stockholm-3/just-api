@@ -6,6 +6,8 @@ C server providing an energy plan for households with solar panels and battery
 ![C](https://img.shields.io/badge/C-%2300599C.svg?style=flat&logo=c&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 ---
+## Project Report
+see [JustApi_Rapport_SV.pdf](docs/JustApi_Rapport_SV.pdf) for API documentation
 
 ## Related repos
 [stockholm-3-lib](https://github.com/Stockholm-3/lib) - Library used for all Stockholm-3 projects. Includes external libraries like Jansson for compiling from source.
