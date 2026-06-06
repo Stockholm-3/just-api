@@ -850,25 +850,48 @@ typedef struct {
     float                 lat;
     float                 lon;
     int                   steps;
+    int                   past_steps;
     char*                 cache_key;
 } AsyncMinutelyContext;
+
+static int parse_past_hours_param(const char* query) {
+    char* p = strstr(query, "past_hours=");
+    if (!p)
+        return 0;
+    int v = atoi(p + 11);
+    return (v < 0) ? 0 : (v > 24) ? 24 : v;
+}
 
 static void minutely_http_callback(const char* event, const char* response,
                                    void* context);
 
-static char* build_minutely_url(float lat, float lon, int steps) {
+static char* build_minutely_url(float lat, float lon, int steps,
+                                int past_steps) {
     char* url = malloc(1024);
     if (!url) {
         return NULL;
     }
 
-    snprintf(url, 1024,
-             "%s?latitude=%.6f&longitude=%.6f"
-             "&minutely_15=temperature_2m,relative_humidity_2m,precipitation,"
-             "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
-             "is_day,direct_radiation"
-             "&forecast_minutely_15=%d&timezone=Europe%%2FBerlin",
-             HOURLY_API_BASE_URL, lat, lon, steps);
+    if (past_steps > 0) {
+        snprintf(
+            url, 1024,
+            "%s?latitude=%.6f&longitude=%.6f"
+            "&minutely_15=temperature_2m,relative_humidity_2m,precipitation,"
+            "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
+            "is_day,direct_radiation"
+            "&forecast_minutely_15=%d&past_minutely_15=%d&timezone=Europe%%"
+            "2FBerlin",
+            HOURLY_API_BASE_URL, lat, lon, steps, past_steps);
+    } else {
+        snprintf(
+            url, 1024,
+            "%s?latitude=%.6f&longitude=%.6f"
+            "&minutely_15=temperature_2m,relative_humidity_2m,precipitation,"
+            "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
+            "is_day,direct_radiation"
+            "&forecast_minutely_15=%d&timezone=Europe%%2FBerlin",
+            HOURLY_API_BASE_URL, lat, lon, steps);
+    }
     return url;
 }
 
@@ -1140,13 +1163,15 @@ int open_meteo_handler_minutely_async(HTTPServerConnection* conn,
         return -1;
     }
 
-    int hours = parse_hours_param(query_string);
-    int steps = hours * 4;
+    int hours      = parse_hours_param(query_string);
+    int past_hours = parse_past_hours_param(query_string);
+    int steps      = hours * 4;
+    int past_steps = past_hours * 4;
 
     /* Generate cache key */
     char key_input[256];
-    snprintf(key_input, sizeof(key_input), "minutely_%.6f_%.6f_%d", lat, lon,
-             steps);
+    snprintf(key_input, sizeof(key_input), "minutely_%.6f_%.6f_%d_%d", lat, lon,
+             steps, past_steps);
 
     char cache_key[FILE_CACHE_KEY_LENGTH];
     if (g_minutely_cache &&
@@ -1177,7 +1202,9 @@ int open_meteo_handler_minutely_async(HTTPServerConnection* conn,
         }
     }
 
-    printf("[METEO] Minutely cache MISS - fetching from API\n");
+    printf(
+        "[METEO] Minutely cache MISS - fetching from API (steps=%d past=%d)\n",
+        steps, past_steps);
 
     /* Create async context */
     AsyncMinutelyContext* ctx = malloc(sizeof(AsyncMinutelyContext));
@@ -1194,14 +1221,15 @@ int open_meteo_handler_minutely_async(HTTPServerConnection* conn,
         return -1;
     }
 
-    ctx->conn      = conn;
-    ctx->lat       = lat;
-    ctx->lon       = lon;
-    ctx->steps     = steps;
-    ctx->cache_key = strdup(cache_key);
+    ctx->conn       = conn;
+    ctx->lat        = lat;
+    ctx->lon        = lon;
+    ctx->steps      = steps;
+    ctx->past_steps = past_steps;
+    ctx->cache_key  = strdup(cache_key);
 
     /* Build URL and fetch */
-    char* url = build_minutely_url(lat, lon, steps);
+    char* url = build_minutely_url(lat, lon, steps, past_steps);
     if (!url) {
         free(ctx->cache_key);
         free(ctx);

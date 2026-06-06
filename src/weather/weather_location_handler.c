@@ -673,8 +673,8 @@ int weather_location_handler_by_city_async(HTTPServerConnection* conn,
     Location location = {.latitude  = best_location->latitude,
                          .longitude = best_location->longitude,
                          .name      = best_location->name};
-    result            = open_meteo_api_get_current_async(&location,
-                                                         weather_by_city_callback, ctx);
+    result = open_meteo_api_get_current_async(&location,
+                                              weather_by_city_callback, ctx);
 
     if (result != 0) {
         char* error_json = response_builder_error(
@@ -808,6 +808,14 @@ static int parse_hours_query(const char* query) {
             hours = 168;
     }
     return hours;
+}
+
+static int parse_past_hours_query(const char* query) {
+    char* p = strstr(query, "past_hours=");
+    if (!p)
+        return 0;
+    int v = atoi(p + 11);
+    return (v < 0) ? 0 : (v > 24) ? 24 : v;
 }
 
 int weather_location_handler_hourly_by_city_async(HTTPServerConnection* conn,
@@ -952,11 +960,12 @@ int weather_location_handler_minutely_by_city_async(HTTPServerConnection* conn,
         return -1;
     }
 
-    int hours = parse_hours_query(query_string);
+    int hours      = parse_hours_query(query_string);
+    int past_hours = parse_past_hours_query(query_string);
 
     printf("[WEATHER_LOCATION] Minutely query: city='%s', country='%s', "
-           "hours=%d\n",
-           city, country, hours);
+           "hours=%d past_hours=%d\n",
+           city, country, hours, past_hours);
 
     /* Geocoding to find coordinates */
     GeocodingResponse* geo_response = NULL;
@@ -1010,8 +1019,9 @@ int weather_location_handler_minutely_by_city_async(HTTPServerConnection* conn,
     /* Build query for minutely handler with coordinates */
     char minutely_query[512];
     snprintf(minutely_query, sizeof(minutely_query),
-             "lat=%.6f&lon=%.6f&hours=%d", best_location->latitude,
-             best_location->longitude, hours);
+             "lat=%.6f&lon=%.6f&hours=%d&past_hours=%d",
+             best_location->latitude, best_location->longitude, hours,
+             past_hours);
 
     geocoding_api_free_response(geo_response);
 

@@ -110,13 +110,13 @@ static int test_parse_health_check_interval(void) {
 
 static int test_parse_all_new_fields(void) {
     const char*  path = write_config("{"
-                                      "\"watchdog\":{"
-                                      "\"health_check_interval_ms\":1000,"
-                                      "\"health_check_timeout_ms\":500,"
-                                      "\"health_check_failures\":5,"
-                                      "\"sigkill_timeout_ms\":10000"
-                                      "}"
-                                      "}");
+                                     "\"watchdog\":{"
+                                     "\"health_check_interval_ms\":1000,"
+                                     "\"health_check_timeout_ms\":500,"
+                                     "\"health_check_failures\":5,"
+                                     "\"sigkill_timeout_ms\":10000"
+                                     "}"
+                                     "}");
     ServerConfig cfg;
     int          rc = config_parser_load(path, &cfg);
     TEST_ASSERT_EQ(rc, 0);
