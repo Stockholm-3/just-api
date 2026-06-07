@@ -10,6 +10,7 @@ typedef struct {
     int weather_code;
 
     double temperature;
+    double apparent_temperature;
     char   temperature_unit[16];
 
     double windspeed;
