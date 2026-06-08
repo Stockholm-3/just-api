@@ -673,8 +673,8 @@ int weather_location_handler_by_city_async(HTTPServerConnection* conn,
     Location location = {.latitude  = best_location->latitude,
                          .longitude = best_location->longitude,
                          .name      = best_location->name};
-    result = open_meteo_api_get_current_async(&location,
-                                              weather_by_city_callback, ctx);
+    result            = open_meteo_api_get_current_async(&location,
+                                                         weather_by_city_callback, ctx);
 
     if (result != 0) {
         char* error_json = response_builder_error(
