@@ -197,6 +197,8 @@ int open_meteo_handler_current(const char* query_string, char** response_json,
                         json_real(weather_data->humidity));
     json_object_set_new(weather_obj, "pressure",
                         json_real(weather_data->pressure));
+    json_object_set_new(weather_obj, "apparent_temperature",
+                        json_real(weather_data->apparent_temperature));
 
     /* Format time as "YYYY-MM-DDTHH:MM" */
     time_t     now     = time(NULL);
@@ -317,6 +319,8 @@ static void weather_fetch_callback(int status, WeatherData* data,
     json_object_set_new(weather_obj, "precipitation_unit", json_string("mm"));
     json_object_set_new(weather_obj, "humidity", json_real(data->humidity));
     json_object_set_new(weather_obj, "pressure", json_real(data->pressure));
+    json_object_set_new(weather_obj, "apparent_temperature",
+                        json_real(data->apparent_temperature));
 
     /* Format time */
     time_t     now     = time(NULL);
@@ -485,9 +489,9 @@ static char* build_hourly_url(float lat, float lon, int hours) {
 
     snprintf(url, 1024,
              "%s?latitude=%.6f&longitude=%.6f"
-             "&hourly=temperature_2m,relative_humidity_2m,precipitation,"
-             "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
-             "is_day&forecast_hours=%d&timezone=GMT",
+             "&hourly=temperature_2m,relative_humidity_2m,"
+             "precipitation,weather_code,surface_pressure,wind_speed_10m,"
+             "wind_direction_10m,is_day&forecast_hours=%d&timezone=GMT",
              HOURLY_API_BASE_URL, lat, lon, hours);
     return url;
 }
@@ -876,7 +880,8 @@ static char* build_minutely_url(float lat, float lon, int steps,
         snprintf(
             url, 1024,
             "%s?latitude=%.6f&longitude=%.6f"
-            "&minutely_15=temperature_2m,relative_humidity_2m,precipitation,"
+            "&minutely_15=temperature_2m,apparent_temperature,"
+            "relative_humidity_2m,precipitation,"
             "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
             "is_day,direct_radiation"
             "&forecast_minutely_15=%d&past_minutely_15=%d&timezone=Europe%%"
@@ -886,7 +891,8 @@ static char* build_minutely_url(float lat, float lon, int steps,
         snprintf(
             url, 1024,
             "%s?latitude=%.6f&longitude=%.6f"
-            "&minutely_15=temperature_2m,relative_humidity_2m,precipitation,"
+            "&minutely_15=temperature_2m,apparent_temperature,"
+            "relative_humidity_2m,precipitation,"
             "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
             "is_day,direct_radiation"
             "&forecast_minutely_15=%d&timezone=Europe%%2FBerlin",
@@ -928,15 +934,16 @@ static char* build_minutely_response_json(const char* api_response, float lat,
         wind_unit = "km/h";
     }
 
-    json_t* temps     = json_object_get(minutely, "temperature_2m");
-    json_t* humidity  = json_object_get(minutely, "relative_humidity_2m");
-    json_t* precip    = json_object_get(minutely, "precipitation");
-    json_t* codes     = json_object_get(minutely, "weather_code");
-    json_t* pressure  = json_object_get(minutely, "surface_pressure");
-    json_t* winds     = json_object_get(minutely, "wind_speed_10m");
-    json_t* winddir   = json_object_get(minutely, "wind_direction_10m");
-    json_t* isday     = json_object_get(minutely, "is_day");
-    json_t* radiation = json_object_get(minutely, "direct_radiation");
+    json_t* temps          = json_object_get(minutely, "temperature_2m");
+    json_t* apparent_temps = json_object_get(minutely, "apparent_temperature");
+    json_t* humidity       = json_object_get(minutely, "relative_humidity_2m");
+    json_t* precip         = json_object_get(minutely, "precipitation");
+    json_t* codes          = json_object_get(minutely, "weather_code");
+    json_t* pressure       = json_object_get(minutely, "surface_pressure");
+    json_t* winds          = json_object_get(minutely, "wind_speed_10m");
+    json_t* winddir        = json_object_get(minutely, "wind_direction_10m");
+    json_t* isday          = json_object_get(minutely, "is_day");
+    json_t* radiation      = json_object_get(minutely, "direct_radiation");
 
     json_t* data         = json_object();
     json_t* location_obj = json_object();
@@ -962,6 +969,11 @@ static char* build_minutely_response_json(const char* api_response, float lat,
             point, "temperature",
             json_real(json_real_value(json_array_get(temps, i))));
         json_object_set_new(point, "temperature_unit", json_string(temp_unit));
+        json_object_set_new(
+            point, "apparent_temperature",
+            json_real(apparent_temps
+                          ? json_real_value(json_array_get(apparent_temps, i))
+                          : 0.0));
 
         json_object_set_new(
             point, "humidity",

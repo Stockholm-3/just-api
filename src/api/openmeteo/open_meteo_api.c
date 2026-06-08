@@ -365,6 +365,11 @@ static int load_weather_from_json(json_t* root, WeatherData** data) {
         (*data)->temperature = json_real_value(temp);
     }
 
+    json_t* apparent_temp = json_object_get(current, "apparent_temperature");
+    if (apparent_temp) {
+        (*data)->apparent_temperature = json_real_value(apparent_temp);
+    }
+
     json_t* windspeed = json_object_get(current, "wind_speed_10m");
     if (windspeed) {
         (*data)->windspeed = json_real_value(windspeed);
@@ -468,6 +473,11 @@ static int parse_weather_json(const char* json_str, WeatherData* data,
     json_t* temp = json_object_get(current, "temperature_2m");
     if (temp) {
         data->temperature = json_real_value(temp);
+    }
+
+    json_t* apparent_temp = json_object_get(current, "apparent_temperature");
+    if (apparent_temp) {
+        data->apparent_temperature = json_real_value(apparent_temp);
     }
 
     json_t* windspeed = json_object_get(current, "wind_speed_10m");
