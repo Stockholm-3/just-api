@@ -884,6 +884,7 @@ static char* build_minutely_url(float lat, float lon, int steps,
             "relative_humidity_2m,precipitation,"
             "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
             "is_day,direct_radiation"
+            "&daily=sunrise,sunset"
             "&forecast_minutely_15=%d&past_minutely_15=%d&timezone=Europe%%"
             "2FBerlin",
             HOURLY_API_BASE_URL, lat, lon, steps, past_steps);
@@ -895,6 +896,7 @@ static char* build_minutely_url(float lat, float lon, int steps,
             "relative_humidity_2m,precipitation,"
             "weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,"
             "is_day,direct_radiation"
+            "&daily=sunrise,sunset"
             "&forecast_minutely_15=%d&timezone=Europe%%2FBerlin",
             HOURLY_API_BASE_URL, lat, lon, steps);
     }
@@ -1025,6 +1027,21 @@ static char* build_minutely_response_json(const char* api_response, float lat,
         json_array_append_new(minutely_array, point);
     }
     json_object_set_new(data, "minutely_forecast", minutely_array);
+
+    // Extract today's sunrise/sunset from Open-Meteo daily data
+    json_t* daily = json_object_get(root, "daily");
+    if (daily) {
+        json_t* sunrise_arr = json_object_get(daily, "sunrise");
+        json_t* sunset_arr  = json_object_get(daily, "sunset");
+        if (json_array_size(sunrise_arr) > 0) {
+            const char* s = json_string_value(json_array_get(sunrise_arr, 0));
+            if (s) json_object_set_new(data, "sunrise", json_string(s));
+        }
+        if (json_array_size(sunset_arr) > 0) {
+            const char* s = json_string_value(json_array_get(sunset_arr, 0));
+            if (s) json_object_set_new(data, "sunset", json_string(s));
+        }
+    }
 
     json_decref(root);
     return response_builder_success(data);
