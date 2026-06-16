@@ -1035,11 +1035,13 @@ static char* build_minutely_response_json(const char* api_response, float lat,
         json_t* sunset_arr  = json_object_get(daily, "sunset");
         if (json_array_size(sunrise_arr) > 0) {
             const char* s = json_string_value(json_array_get(sunrise_arr, 0));
-            if (s) json_object_set_new(data, "sunrise", json_string(s));
+            if (s)
+                json_object_set_new(data, "sunrise", json_string(s));
         }
         if (json_array_size(sunset_arr) > 0) {
             const char* s = json_string_value(json_array_get(sunset_arr, 0));
-            if (s) json_object_set_new(data, "sunset", json_string(s));
+            if (s)
+                json_object_set_new(data, "sunset", json_string(s));
         }
     }
 
